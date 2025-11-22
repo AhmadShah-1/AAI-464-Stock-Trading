@@ -48,3 +48,6 @@ data/
 # Logs
 *.log
 logs/
+
+AGENTS.md
+CLAUDE.md
