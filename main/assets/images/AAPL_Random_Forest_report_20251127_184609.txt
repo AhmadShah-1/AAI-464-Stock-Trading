@@ -1,32 +1,32 @@
 ======================================================================
 TRADING ANALYSIS REPORT - AAPL
-Model: Technical Indicator
-Generated: 2025-11-12 08:39:47
+Model: Random Forest
+Generated: 2025-11-27 18:46:09
 ======================================================================
 
 SIGNAL DISTRIBUTION
 ----------------------------------------------------------------------
-  BUY signals:    15 ( 37.5%)
-  HOLD signals:   23 ( 57.5%)
-  SELL signals:    2 (  5.0%)
+  BUY signals:     0 (  0.0%)
+  HOLD signals:   25 ( 62.5%)
+  SELL signals:   15 ( 37.5%)
   Total:          40
 
 CONFIDENCE STATISTICS
 ----------------------------------------------------------------------
-  Average:    37.38%
-  Median:     35.59%
-  Std Dev:    9.68%
-  Min:        20.21%
-  Max:        64.32%
-  Above 60%:  1 (2.5%)
+  Average:    53.04%
+  Median:     51.36%
+  Std Dev:    8.91%
+  Min:        38.48%
+  Max:        69.59%
+  Above 60%:  11 (27.5%)
 
 MODEL PERFORMANCE
 ----------------------------------------------------------------------
-  Overall Accuracy: 25.00%
+  Overall Accuracy: 35.00%
   Num Samples: 40
   Sell Accuracy: 0.00%
-  Hold Accuracy: 46.15%
-  Buy Accuracy: 21.05%
+  Hold Accuracy: 66.67%
+  Buy Accuracy: 0.00%
 
 ======================================================================
 End of Report

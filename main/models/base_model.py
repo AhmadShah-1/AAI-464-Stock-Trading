@@ -1,47 +1,43 @@
-"""
-Abstract base class for all trading models.
-Defines the standard interface that all models must implement.
-"""
+'''
+This file is used to define the base model class
+All models should inherit from this class
+'''
 
 from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
 from typing import Tuple, Dict
 
-
 class BaseModel(ABC):
     """
     Abstract base class for trading prediction models.
     All models must implement train(), predict(), get_confidence(), and evaluate().
     """
-    
+
+    # Initialize the base model
     def __init__(self, name: str):
         """
-        Initialize the base model.
-        
         Args:
             name: Name of the model
         """
         self.name = name
         self.is_trained = False
         self.feature_columns = []
-    
+
+    # Train the model on historical data
     @abstractmethod
     def train(self, X: pd.DataFrame, y: pd.Series) -> None:
-        """
-        Train the model on historical data.
-        
+        """        
         Args:
             X: Feature DataFrame
             y: Target Series (0=sell, 1=hold, 2=buy)
         """
         pass
     
+    # Make predictions on new data
     @abstractmethod
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """
-        Make predictions on new data.
-        
+        """        
         Args:
             X: Feature DataFrame
             
@@ -50,11 +46,10 @@ class BaseModel(ABC):
         """
         pass
     
+    # Get confidence scores for predictions
     @abstractmethod
     def get_confidence(self, X: pd.DataFrame) -> np.ndarray:
-        """
-        Get confidence scores for predictions.
-        
+        """        
         Args:
             X: Feature DataFrame
             
@@ -63,10 +58,9 @@ class BaseModel(ABC):
         """
         pass
     
+    # Evaluate the model on test data
     def evaluate(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, float]:
-        """
-        Evaluate model performance on test data.
-        
+        """        
         Args:
             X: Feature DataFrame
             y: True target values
@@ -94,21 +88,21 @@ class BaseModel(ABC):
             **class_accuracies
         }
     
+    
+    # Convert numeric prediction to action name
     def get_action_name(self, prediction: int) -> str:
-        """
-        Convert numeric prediction to action name.
-        
+        """        
         Args:
             prediction: Numeric prediction (0, 1, or 2)
             
-        Returns:
-            Action name ('SELL', 'HOLD', or 'BUY')
+        Returns: Action name ('SELL', 'HOLD', or 'BUY')
         """
         action_map = {0: 'SELL', 1: 'HOLD', 2: 'BUY'}
-        return action_map.get(prediction, 'UNKNOWN')
+        return action_map.get(prediction, 'UNKNOWN')    # Return UNKNOWN if prediction is not 0, 1, or 2
     
+
+    # Check if model has been trained
     def check_trained(self):
-        """Check if model has been trained. Raises error if not."""
         if not self.is_trained:
             raise RuntimeError(f"{self.name} must be trained before making predictions")
 

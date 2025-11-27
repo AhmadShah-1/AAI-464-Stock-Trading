@@ -10,42 +10,36 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from config import Config
 
-
 class AlpacaClient:
-    """Client for interacting with Alpaca's stock market data API."""
-    
+
     def __init__(self):
-        """Initialize the Alpaca client with API credentials from config."""
-        Config.validate()
         self.client = StockHistoricalDataClient(
             api_key=Config.ALPACA_API_KEY,
-            secret_key=Config.ALPACA_SECRET_KEY
+            secret_key=Config.ALPACA_SECRET_KEY,
         )
-    
-    def fetch_historical_data(self, symbol: str, days: int = None) -> pd.DataFrame:
-        """
-        Fetch historical OHLCV data for a given symbol.
         
+    # Fetch historical data from Alpaca
+    def fetch_historical_data(self, symbol: str, days: int = None) -> pd.DataFrame:
+        """        
         Args:
-            symbol: Stock ticker symbol (e.g., 'AAPL')
-            days: Number of days of historical data to fetch (default from config)
+            symbol: Stock symbol (e.g. 'AAPL')
+            days: Number of days of historical data to fetch (default: None for max available)
             
         Returns:
-            DataFrame with columns: open, high, low, close, volume, timestamp
-            
-        Raises:
-            Exception: If API request fails
+            DataFrame with OHLCV data
         """
+
+        # If days is not provided, use the default number of days from config
         if days is None:
             days = Config.HISTORICAL_DAYS
-        
-        # Calculate date range
+
+        # Calculate date range to fetch data for
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
-        
-        print(f"Fetching {days} days of historical data for {symbol}...")
-        print(f"Date range: {start_date.date()} to {end_date.date()}")
-        
+
+        print(f"Date range: {start_date.date()} to {end_date.date()} for {symbol}")
+
+
         try:
             # Create request for daily bars
             request_params = StockBarsRequest(
@@ -80,18 +74,16 @@ class AlpacaClient:
             return df
             
         except Exception as e:
-            raise Exception(f"Failed to fetch data from Alpaca API: {str(e)}")
-    
+            raise Exception(f"Error with Alpaca API (Check API Keys and Base URL): {str(e)}")
+
+
+    # Get the most recent closing price for a symbol
     def get_latest_price(self, symbol: str) -> float:
-        """
-        Get the most recent closing price for a symbol.
-        
+        """        
         Args:
             symbol: Stock ticker symbol
             
-        Returns:
-            Latest closing price
+        Returns: Latest closing price
         """
         df = self.fetch_historical_data(symbol, days=5)
         return df.iloc[-1]['close']
-
