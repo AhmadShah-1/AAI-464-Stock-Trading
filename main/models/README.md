@@ -65,7 +65,31 @@ Same as LightGBM: Predict 5-day forward returns and generate trading signals.
 
 ---
 
-## 3. Random Forest Model (`random_forest_model.py`)
+## 3. Ensemble Model (`ensemble_model.py`)
+
+**Current Status:** 🌟 **The "Super Model"** (Best of Both Worlds)
+
+### Objective
+Combine the strengths of LightGBM (Direction) and CatBoost (Magnitude) using a weighted average.
+
+### Implementation Details
+- **Strategy:** Weighted Average Ensemble.
+- **Formula:** `Prediction = (0.4 * LightGBM) + (0.6 * CatBoost)`
+- **Rationale:** CatBoost gets slightly more weight due to its superior R² and stability.
+
+### Performance (The "Council of Experts")
+| Metric | LightGBM | CatBoost | Ensemble | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| **Directional Accuracy** | **77.00%** | 74.50% | **77.00%** | ✅ Matches Best |
+| **R² Score** | 0.6409 | **0.6626** | **0.6600** | ✅ Near Best |
+| **MAE** | 2.21% | **2.10%** | **2.13%** | ✅ Near Best |
+| **Action Accuracy** | 57.50% | **58.50%** | **58.00%** | ✅ Balanced |
+
+**Conclusion:** The Ensemble Model successfully captures the high directional accuracy of LightGBM while maintaining the low error rate and stability of CatBoost. It is the most robust choice for live trading.
+
+---
+
+## 4. Random Forest Model (`random_forest_model.py`)
 
 **Current Status:** ⏸️ Baseline / Alternative
 
