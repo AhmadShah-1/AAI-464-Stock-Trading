@@ -559,11 +559,16 @@ class LightGBMRegressionModel:
 if __name__ == "__main__":
     
     # Configuration
-    TRAIN_SYMBOLS = ['BAC', 'JPM', 'WFC']  # Training stocks
-    TEST_SYMBOLS = ['C']                    # Test stock
+    TRAIN_SYMBOLS = [
+        'BAC', 'JPM', 'WFC',       # Original Banks
+        'GS', 'MS',                # Investment Banks
+        'USB', 'PNC',              # Regional/Diversified Banks
+        'AXP', 'COF'               # Credit Services
+    ]
+    TEST_SYMBOLS = ['C']           # Citigroup (remains the test case)
     FORWARD_DAYS = 5                        # Predict 5-day returns
-    FETCH_NEW_DATA = False                  # Set to True to fetch from Alpaca
-    USE_TUNED_PARAMS = False                # Set to True to use Optuna-tuned params
+    FETCH_NEW_DATA = True                  # Set to True to fetch from Alpaca
+    USE_TUNED_PARAMS = False                # Baseline often works better for generalization
     
     print("="*70)
     print("LIGHTGBM REGRESSION MODEL - STOCK TRADING")

@@ -10,8 +10,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).resolve().parent.parent
 env_path = project_root / '.env'
+print(f"DEBUG: Loading .env from: {env_path}")
+print(f"DEBUG: File exists? {env_path.exists()}")
 load_dotenv(dotenv_path=env_path)
 
 
@@ -20,6 +22,11 @@ class Config:
     ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
     ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
     ALPACA_BASE_URL = os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.markets')
+    
+    if not ALPACA_API_KEY:
+        print("⚠️ WARNING: ALPACA_API_KEY not found in environment variables!")
+    else:
+        print("✅ ALPACA_API_KEY loaded successfully.")
 
     # Trading settings (EDIT THESE FROM CONFIG.PY)
     TRADING_ENABLED = os.getenv('TRADING_ENABLED', 'false').lower() == 'true'
