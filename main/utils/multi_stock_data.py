@@ -37,6 +37,31 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
 
             # Add symbol identifier (already exists but ensure it's set)
             df['symbol'] = symbol
+            
+            # Fetch News Sentiment
+            print(f"    Fetching news for {symbol}...")
+            news_df = client.fetch_news_sentiment(symbol, days=days)
+            
+            if not news_df.empty:
+                # Merge news data
+                # Ensure timestamps are timezone-aware UTC for merging
+                if df['timestamp'].dt.tz is None:
+                    df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
+                if news_df['timestamp'].dt.tz is None:
+                    news_df['timestamp'] = news_df['timestamp'].dt.tz_localize('UTC')
+                
+                # Merge on timestamp
+                df = pd.merge(df, news_df, on='timestamp', how='left')
+                
+                # Fill NaN news values with 0 (neutral sentiment, no volume)
+                df['news_sentiment'] = df['news_sentiment'].fillna(0)
+                df['news_volume'] = df['news_volume'].fillna(0)
+                
+                print(f"    ✓ Added news data: {len(news_df)} days with news")
+            else:
+                df['news_sentiment'] = 0
+                df['news_volume'] = 0
+                print(f"    - No news data found")
 
             all_data.append(df)
 

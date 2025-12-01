@@ -287,6 +287,20 @@ class LightGBMRegressionModel:
             df['is_month_end'] = (df['timestamp'].dt.is_month_end | 
                                   (df['timestamp'] + pd.Timedelta(days=1)).dt.is_month_end |
                                   (df['timestamp'] + pd.Timedelta(days=2)).dt.is_month_end).astype(int)
+                                  
+        # === 7. NEWS SENTIMENT FEATURES (New) ===
+        if 'news_sentiment' in df.columns:
+            # Sentiment momentum (change in sentiment)
+            df['sentiment_momentum'] = df['news_sentiment'].diff()
+            
+            # Sentiment moving average
+            df['sentiment_ma_5'] = df['news_sentiment'].rolling(5).mean()
+            
+            # High news volume day
+            df['high_news_volume'] = (df['news_volume'] > df['news_volume'].rolling(20).mean() * 1.5).astype(int)
+            
+            # Sentiment impact (sentiment * volume)
+            df['sentiment_impact'] = df['news_sentiment'] * df['news_volume']
         
         return df
     
@@ -649,11 +663,24 @@ if __name__ == "__main__":
     TOP_N_FEATURES = 35  # Keep top 35 most correlated features
     top_features = correlations_abs.head(TOP_N_FEATURES).index.tolist()
     
+    # Force include news features if they exist
+    news_features = ['news_sentiment', 'news_volume', 'sentiment_momentum', 'sentiment_ma_5', 'high_news_volume', 'sentiment_impact']
+    forced_news_features = [f for f in news_features if f in all_feature_cols]
+    
+    if forced_news_features:
+        print(f"\n📰 News Feature Correlations:")
+        for f in forced_news_features:
+            corr = correlations.get(f, 0)
+            print(f"   {f:20s} → {corr:.4f}")
+            if f not in top_features:
+                top_features.append(f)
+                print(f"   (Forced inclusion of {f})")
+    
     print(f"\n📊 Top 10 features by correlation with target:")
     for i, (feat, corr) in enumerate(correlations_abs.head(10).items(), 1):
         print(f"   {i:2d}. {feat:30s} → {corr:.4f}")
     
-    print(f"\n✅ Selected {TOP_N_FEATURES} features with highest correlation")
+    print(f"\n✅ Selected {len(top_features)} features (including forced news features)")
     print(f"   Correlation range: {correlations_abs.iloc[TOP_N_FEATURES-1]:.4f} to {correlations_abs.iloc[0]:.4f}")
     
     # Use selected features
