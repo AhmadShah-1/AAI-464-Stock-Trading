@@ -40,7 +40,32 @@ Optimized using **Optuna** (100 trials) to minimize RMSE.
 
 ---
 
-## 2. Random Forest Model (`random_forest_model.py`)
+## 2. CatBoost Regression Model (`catboost_regression_model.py`)
+
+**Current Status:** ✅ Strong Contender / Best R²
+
+### Objective
+Same as LightGBM: Predict 5-day forward returns and generate trading signals.
+
+### Implementation Details
+- **Type:** CatBoost Regressor (Categorical Boosting).
+- **Key Advantage:** Better handling of noise and overfitting on small datasets.
+- **Configuration:** `iterations=1000`, `depth=6`, `learning_rate=0.03`, `loss_function='RMSE'`.
+
+### Performance (Comparison vs LightGBM)
+| Metric | LightGBM | CatBoost | Winner |
+| :--- | :--- | :--- | :--- |
+| **R² Score** | 0.6409 | **0.6626** | 🏆 CatBoost |
+| **MAE** | 2.21% | **2.10%** | 🏆 CatBoost |
+| **Directional Accuracy** | **77.00%** | 74.50% | 🏆 LightGBM |
+| **Action Accuracy** | 57.50% | **58.50%** | 🏆 CatBoost |
+
+> [!NOTE]
+> CatBoost provides better **magnitude predictions** (lower error, higher R²) and slightly better **trading decisions** (Action Accuracy), while LightGBM is better at purely predicting the **direction** (Up/Down).
+
+---
+
+## 3. Random Forest Model (`random_forest_model.py`)
 
 **Current Status:** ⏸️ Baseline / Alternative
 
