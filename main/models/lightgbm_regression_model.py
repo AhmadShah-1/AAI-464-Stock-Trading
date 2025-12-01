@@ -578,12 +578,39 @@ if __name__ == "__main__":
     model = LightGBMRegressionModel(use_tuned_params=USE_TUNED_PARAMS)
     
     # Load or fetch data
+    # Load or fetch data
     if FETCH_NEW_DATA:
         train_df, test_df = model.fetch_data(TRAIN_SYMBOLS, TEST_SYMBOLS)
     else:
         print("\nLoading data from CSV...")
-        combined_df = pd.read_csv('../data.csv')  # Fixed path from models/ directory
-        combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+        all_data = pd.read_csv('../data.csv')
+        all_data['timestamp'] = pd.to_datetime(all_data['timestamp'])
+        
+        # Separate Market Data
+        market_symbols = ['SPY', 'VXX', 'XLF']
+        market_df = all_data[all_data['symbol'].isin(market_symbols)].copy()
+        stock_df = all_data[~all_data['symbol'].isin(market_symbols)].copy()
+        
+        # Calculate Stock Returns (needed for relative strength)
+        stock_df['returns'] = stock_df.groupby('symbol')['close'].pct_change()
+        
+        # Calculate Market Returns
+        market_df['market_return'] = market_df.groupby('symbol')['close'].pct_change()
+        
+        # Pivot market data to have columns like 'SPY_return', 'XLF_return'
+        market_pivoted = market_df.pivot(index='timestamp', columns='symbol', values='market_return')
+        market_pivoted.columns = [f"{col}_return" for col in market_pivoted.columns]
+        
+        # Merge Market Data with Stocks
+        print("Merging market context features...")
+        combined_df = stock_df.merge(market_pivoted, on='timestamp', how='left')
+        
+        # Create Relative Strength Features
+        for m_sym in market_symbols:
+            if f"{m_sym}_return" in combined_df.columns:
+                combined_df[f'rs_{m_sym}'] = combined_df['returns'] - combined_df[f"{m_sym}_return"]
+        
+        # Split Train/Test
         train_df = combined_df[combined_df['symbol'].isin(TRAIN_SYMBOLS)].reset_index(drop=True)
         test_df = combined_df[combined_df['symbol'].isin(TEST_SYMBOLS)].reset_index(drop=True)
         print(f"Loaded {len(train_df)} training samples, {len(test_df)} testing samples")
@@ -595,6 +622,8 @@ if __name__ == "__main__":
     
     # Automatically detect all feature columns (exclude target and metadata)
     exclude_cols = ['target', 'forward_returns', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
+    # Also exclude raw market return columns if we only want relative strength, or keep them. Let's keep them.
+    
     all_feature_cols = [col for col in train_features.columns if col not in exclude_cols]
     
     print(f"\n✅ Total features created: {len(all_feature_cols)}")

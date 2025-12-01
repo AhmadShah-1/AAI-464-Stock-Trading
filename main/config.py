@@ -28,7 +28,7 @@ class Config:
 
     # Stock settings
     DEFAULT_SYMBOL = os.getenv('DEFAULT_SYMBOL', 'AAPL')
-    HISTORICAL_DAYS = int(os.getenv('HISTORICAL_DAYS', '3650'))  # ~10 years (from 2015 onward)
+    HISTORICAL_DAYS = int(os.getenv('HISTORICAL_DAYS', '365'))  # 1 year (optimal for stationarity)
 
     @classmethod
     def display(cls):
