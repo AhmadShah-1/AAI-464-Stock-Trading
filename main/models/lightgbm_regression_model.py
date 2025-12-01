@@ -563,7 +563,9 @@ if __name__ == "__main__":
         'BAC', 'JPM', 'WFC',       # Original Banks
         'GS', 'MS',                # Investment Banks
         'USB', 'PNC',              # Regional/Diversified Banks
-        'AXP', 'COF'               # Credit Services
+        'AXP', 'COF',              # Credit Services
+        'SCHW', 'BLK',             # Asset Management
+        'BK', 'STT', 'TFC'         # Custody & Regional Banks
     ]
     TEST_SYMBOLS = ['C']           # Citigroup (remains the test case)
     FORWARD_DAYS = 5                        # Predict 5-day returns
