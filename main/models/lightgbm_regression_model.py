@@ -192,6 +192,105 @@ class LightGBMRegressionModel:
         return df
     
     
+    def create_comprehensive_features(self, df):
+        """Create 39 additional comprehensive features for improved prediction."""
+        df = df.copy()
+        
+        # === 1. PRICE ACTION FEATURES (8) ===
+        df['overnight_gap'] = (df['open'] - df['close'].shift()) / df['close'].shift()
+        df['gap_filled'] = ((df['high'] >= df['close'].shift()) & (df['low'] <= df['close'].shift())).astype(int)
+        df['intraday_range'] = (df['high'] - df['low']) / df['open']
+        df['close_position'] = (df['close'] - df['low']) / (df['high'] - df['low'])
+        df['upper_shadow'] = (df['high'] - df[['open', 'close']].max(axis=1)) / (df['high'] - df['low'])
+        df['lower_shadow'] = (df[['open', 'close']].min(axis=1) - df['low']) / (df['high'] - df['low'])
+        df['body_size'] = np.abs(df['close'] - df['open']) / df['open']
+        df['daily_return_volatility'] = df['returns'].rolling(window=10).std()
+        
+        # === 2. VOLUME FEATURES (6) ===
+        price_change = df['close'] - df['close'].shift()
+        df['volume_price_trend'] = (price_change / df['close'].shift() * df['volume']).cumsum()
+        df['on_balance_volume'] = (np.sign(price_change) * df['volume']).cumsum()
+        df['volume_weighted_return'] = df['returns'] * (df['volume'] / df['volume'].rolling(20).mean())
+        df['relative_volume'] = df['volume'] / df['volume'].rolling(20).mean()
+        df['volume_momentum'] = df['volume'].pct_change(5)
+        df['high_volume_days'] = (df['volume'] > df['volume'].rolling(20).mean() * 1.5).rolling(10).sum()
+        
+        # === 3. MOMENTUM & TREND FEATURES (7) ===
+        df['roc_5'] = (df['close'] - df['close'].shift(5)) / df['close'].shift(5)
+        df['roc_10'] = (df['close'] - df['close'].shift(10)) / df['close'].shift(10)
+        
+        # ADX (Average Directional Index)
+        plus_dm = df['high'].diff()
+        minus_dm = -df['low'].diff()
+        plus_dm[plus_dm < 0] = 0
+        minus_dm[minus_dm < 0] = 0
+        tr = df['atr_14'] * 14  # Approximate true range sum
+        plus_di = 100 * (plus_dm.rolling(14).mean() / tr)
+        minus_di = 100 * (minus_dm.rolling(14).mean() / tr)
+        dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
+        df['adx_14'] = dx.rolling(14).mean()
+        
+        # CCI (Commodity Channel Index)
+        typical_price = (df['high'] + df['low'] + df['close']) / 3
+        df['cci_20'] = (typical_price - typical_price.rolling(20).mean()) / (0.015 * typical_price.rolling(20).std())
+        
+        # TRIX (Triple Exponential Moving Average)
+        ema1 = df['close'].ewm(span=15, adjust=False).mean()
+        ema2 = ema1.ewm(span=15, adjust=False).mean()
+        ema3 = ema2.ewm(span=15, adjust=False).mean()
+        df['trix'] = ema3.pct_change() * 100
+        
+        # Ultimate Oscillator (multi-timeframe)
+        bp = df['close'] - df[['low', 'close']].shift().min(axis=1)
+        tr_uo = df[['high', 'close']].shift().max(axis=1) - df[['low', 'close']].shift().min(axis=1)
+        avg7 = bp.rolling(7).sum() / tr_uo.rolling(7).sum()
+        avg14 = bp.rolling(14).sum() / tr_uo.rolling(14).sum()
+        avg28 = bp.rolling(28).sum() / tr_uo.rolling(28).sum()
+        df['ultimate_oscillator'] = 100 * ((4 * avg7 + 2 * avg14 + avg28) / 7)
+        
+        # KST (Know Sure Thing)
+        roc1 = df['close'].pct_change(10)
+        roc2 = df['close'].pct_change(15)
+        roc3 = df['close'].pct_change(20)
+        roc4 = df['close'].pct_change(30)
+        df['kst'] = (roc1.rolling(10).mean() * 1 + roc2.rolling(10).mean() * 2 + 
+                     roc3.rolling(10).mean() * 3 + roc4.rolling(15).mean() * 4)
+        
+        # === 4. VOLATILITY FEATURES (5) ===
+        df['historical_volatility_20'] = df['returns'].rolling(20).std() * np.sqrt(252)
+        
+        # Parkinson volatility (high-low range estimator)
+        df['parkinson_volatility'] = np.sqrt(1/(4*np.log(2)) * ((np.log(df['high']/df['low']))**2).rolling(20).mean()) * np.sqrt(252)
+        
+        # Garman-Klass volatility (OHLC estimator)
+        log_hl = (np.log(df['high']) - np.log(df['low']))**2
+        log_co = (np.log(df['close']) - np.log(df['open']))**2
+        df['garman_klass_volatility'] = np.sqrt((0.5 * log_hl - (2*np.log(2)-1) * log_co).rolling(20).mean()) * np.sqrt(252)
+        
+        df['volatility_ratio'] = df['volatility_5'] / df['volatility_10']
+        df['volatility_breakout'] = (df['volatility_10'] > df['volatility_10'].rolling(50).mean() + 2*df['volatility_10'].rolling(50).std()).astype(int)
+        
+        # === 5. MARKET MICROSTRUCTURE FEATURES (4) ===
+        df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap']
+        df['price_efficiency'] = df['close'] / (df['high'] - df['low']).rolling(20).sum()
+        df['trade_intensity'] = df['trade_count'] / df['volume']
+        df['avg_trade_size'] = df['volume'] / df['trade_count']
+        
+        # === 6. TIME-BASED FEATURES (5) ===
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['day_of_week'] = df['timestamp'].dt.dayofweek
+            df['week_of_month'] = (df['timestamp'].dt.day - 1) // 7 + 1
+            df['month'] = df['timestamp'].dt.month
+            df['quarter'] = df['timestamp'].dt.quarter
+            # Last 3 trading days of month
+            df['is_month_end'] = (df['timestamp'].dt.is_month_end | 
+                                  (df['timestamp'] + pd.Timedelta(days=1)).dt.is_month_end |
+                                  (df['timestamp'] + pd.Timedelta(days=2)).dt.is_month_end).astype(int)
+        
+        return df
+    
+    
     def create_target(self, df, forward_days=5):
         """Create regression target (forward returns)."""
         df = df.copy()
@@ -201,19 +300,21 @@ class LightGBMRegressionModel:
     
     
     def prepare_data(self, df, forward_days=5):
-        """Complete feature engineering pipeline."""
+        """Complete feature engineering pipeline with comprehensive features."""
         if 'symbol' in df.columns and df['symbol'].nunique() > 1:
             all_processed = []
             for symbol in df['symbol'].unique():
                 symbol_df = df[df['symbol'] == symbol].copy()
                 symbol_df = self.create_features(symbol_df)
                 symbol_df = self.create_advanced_features(symbol_df)
+                symbol_df = self.create_comprehensive_features(symbol_df)  # NEW!
                 symbol_df = self.create_target(symbol_df, forward_days)
                 all_processed.append(symbol_df)
             return pd.concat(all_processed, ignore_index=True)
         else:
             df = self.create_features(df)
             df = self.create_advanced_features(df)
+            df = self.create_comprehensive_features(df)  # NEW!
             return self.create_target(df, forward_days)
     
     
@@ -492,15 +593,35 @@ if __name__ == "__main__":
     train_features = model.prepare_data(train_df, FORWARD_DAYS).dropna()
     test_features = model.prepare_data(test_df, FORWARD_DAYS).dropna()
     
-    # Define feature columns
-    feature_cols = [
-        'returns', 'log_returns', 'volatility_5', 'volatility_10',
-        'volume_change', 'volume_ratio', 'price_to_sma_5', 'price_to_sma_10', 'price_to_sma_20',
-        'sma_5_10_cross', 'sma_10_20_cross', 'momentum_5', 'momentum_10',
-        'close_to_high', 'close_to_low',
-        'rsi_14', 'macd', 'macd_signal', 'macd_diff', 'bb_width', 'bb_position',
-        'atr_14', 'stoch_k', 'stoch_d', 'ema_cross', 'williams_r', 'ema_12', 'ema_26'
-    ]
+    # Automatically detect all feature columns (exclude target and metadata)
+    exclude_cols = ['target', 'forward_returns', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
+    all_feature_cols = [col for col in train_features.columns if col not in exclude_cols]
+    
+    print(f"\n✅ Total features created: {len(all_feature_cols)}")
+    print(f"   Basic features: 15")
+    print(f"   Advanced features: 13")
+    print(f"   Comprehensive features: 39")
+    
+    # === CORRELATION-BASED FEATURE SELECTION ===
+    print(f"\n🔍 Performing correlation analysis with target...")
+    
+    # Calculate correlation with target
+    correlations = train_features[all_feature_cols + ['target']].corr()['target'].drop('target')
+    correlations_abs = correlations.abs().sort_values(ascending=False)
+    
+    # Select top N features by correlation
+    TOP_N_FEATURES = 35  # Keep top 35 most correlated features
+    top_features = correlations_abs.head(TOP_N_FEATURES).index.tolist()
+    
+    print(f"\n📊 Top 10 features by correlation with target:")
+    for i, (feat, corr) in enumerate(correlations_abs.head(10).items(), 1):
+        print(f"   {i:2d}. {feat:30s} → {corr:.4f}")
+    
+    print(f"\n✅ Selected {TOP_N_FEATURES} features with highest correlation")
+    print(f"   Correlation range: {correlations_abs.iloc[TOP_N_FEATURES-1]:.4f} to {correlations_abs.iloc[0]:.4f}")
+    
+    # Use selected features
+    feature_cols = top_features
     
     X_train = train_features[feature_cols]
     y_train = train_features['target']
