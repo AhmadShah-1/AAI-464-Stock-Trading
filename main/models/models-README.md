@@ -1,117 +1,45 @@
 # Stock Prediction Models
 
-This directory contains the machine learning models used for stock price prediction and trading signal generation.
+This directory contains the machine learning models we developed for predicting stock prices and generating trading signals. We experimented with a few different approaches, primarily focusing on regression models to predict future returns, which we then converted into trading signals.
 
 ## 1. LightGBM Regression Model (`lightgbm_regression_model.py`)
 
-**Current Status:** ✅ Active / Best Performing Model
+This ended up being our primary and best-performing model. The main idea here was to predict the **5-day forward return** as a continuous value. Once we have that prediction, we classify it into BUY, SELL, or HOLD signals based on a simple threshold (we used ±2%).
 
-### Objective
-Predict the **5-day forward return** (continuous value) of a stock. Predictions are then converted into trading signals (BUY, SELL, HOLD) based on a threshold (e.g., ±2%).
+### Implementation & Features
+We used a LightGBM regressor because it's generally fast and handles tabular data well. We fed it a lot of data—about a year's worth of daily OHLCV data for 14 different financial sector stocks (like JPM, GS, etc.).
 
-### Implementation Details
-- **Type:** Gradient Boosting Regressor (LightGBM).
-- **Target:** 5-day future return (`(close_t+5 - close_t) / close_t`).
-- **Data Source:** Alpaca API (Daily OHLCV).
-- **Training Data:** 1 year of daily data for 14 financial sector stocks (e.g., JPM, BAC, GS, MS).
+For features, we didn't hold back. We generated over 77 features including:
+*   **Price Action:** Simple returns, log returns, and moving averages.
+*   **Momentum Indicators:** Things like RSI, MACD, and Stochastic Oscillators.
+*   **Volatility:** ATR and Bollinger Bands.
+*   **News Sentiment:** We also integrated daily sentiment scores from the Alpaca News API to try and capture market sentiment, which felt important for this sector.
 
-### Feature Engineering
-The model utilizes **77+ features** across multiple categories:
-1.  **Price Action:** Returns, Log Returns, SMA distances.
-2.  **Momentum:** RSI, MACD, ROC, Stochastic Oscillator, Williams %R.
-3.  **Volatility:** ATR, Bollinger Bands, Parkinson/Garman-Klass Volatility.
-4.  **Volume:** Volume Change, OBV, VWAP distance.
-5.  **Market Context:** Relative strength vs SPY, VXX (Volatility Index), XLF (Financial Sector).
-6.  **News Sentiment:** Daily sentiment score, news volume, sentiment momentum (via Alpaca News API).
+We used a feature selection step to narrow this down to the top ~35 most relevant features to avoid overfitting, though we forced the model to keep the news sentiment features since we really wanted to test their impact.
 
-**Feature Selection:**
-- Automatically selects the top ~35 features most correlated with the target.
-- **Forced Inclusion:** News sentiment features are explicitly included to capture non-linear market sentiment effects.
-
-### Hyperparameter Tuning
-Optimized using **Optuna** (100 trials) to minimize RMSE.
-- **Key Params:** `learning_rate=0.01`, `num_leaves=31`, `feature_fraction=0.8`, `bagging_freq=5`.
-
-### Performance (Latest Run)
-- **Directional Accuracy:** **77.00%** (Correctly predicts Up/Down direction).
-- **R² Score:** **0.6409** (Explains 64% of variance).
-- **MAE:** **2.21%** (Average error in return prediction).
-- **Trading Action Accuracy:** **57.50%** (Correct BUY/SELL/HOLD classification).
-
----
+### Performance
+After tuning hyperparameters with Optuna (running about 100 trials), we got some pretty solid results:
+*   **Directional Accuracy:** ~77% (It’s quite good at guessing if the stock will go up or down).
+*   **R² Score:** 0.64 (Explains a good chunk of the variance).
+*   **MAE:** 2.21%
 
 ## 2. CatBoost Regression Model (`catboost_regression_model.py`)
 
-**Current Status:** ✅ Strong Contender / Best R²
+We also experimented with CatBoost to see if it could handle the noise in the data better than LightGBM. The setup was identical—predicting the 5-day forward return.
 
-### Objective
-Same as LightGBM: Predict 5-day forward returns and generate trading signals.
-
-### Implementation Details
-- **Type:** CatBoost Regressor (Categorical Boosting).
-- **Key Advantage:** Better handling of noise and overfitting on small datasets.
-- **Configuration:** `iterations=1000`, `depth=6`, `learning_rate=0.03`, `loss_function='RMSE'`.
-
-### Performance (Comparison vs LightGBM)
-| Metric | LightGBM | CatBoost | Winner |
-| :--- | :--- | :--- | :--- |
-| **R² Score** | 0.6409 | **0.6626** | 🏆 CatBoost |
-| **MAE** | 2.21% | **2.10%** | 🏆 CatBoost |
-| **Directional Accuracy** | **77.00%** | 74.50% | 🏆 LightGBM |
-| **Action Accuracy** | 57.50% | **58.50%** | 🏆 CatBoost |
-
-> [!NOTE]
-> CatBoost provides better **magnitude predictions** (lower error, higher R²) and slightly better **trading decisions** (Action Accuracy), while LightGBM is better at purely predicting the **direction** (Up/Down).
-
----
+It actually performed slightly better in terms of raw error metrics (lower MAE and higher R² of 0.66), likely because of how it handles categorical nuances and overfitting. However, LightGBM still edged it out slightly when it came to just predicting the pure direction of the move.
 
 ## 3. Ensemble Model (`ensemble_model.py`)
 
-**Current Status:** 🌟 **The "Super Model"** (Best of Both Worlds)
+Since we had two decent models, it made sense to combine them. We built a simple ensemble that takes a weighted average of the predictions from both LightGBM and CatBoost.
 
-### Objective
-Combine the strengths of LightGBM (Direction) and CatBoost (Magnitude) using a weighted average.
+We gave CatBoost slightly more weight (60%) because of its stability, with LightGBM taking the remaining 40%.
 
-### Implementation Details
-- **Strategy:** Weighted Average Ensemble.
-- **Formula:** `Prediction = (0.4 * LightGBM) + (0.6 * CatBoost)`
-- **Rationale:** CatBoost gets slightly more weight due to its superior R² and stability.
-
-### Performance (The "Council of Experts")
-| Metric | LightGBM | CatBoost | Ensemble | Result |
-| :--- | :--- | :--- | :--- | :--- |
-| **Directional Accuracy** | **77.00%** | 74.50% | **77.00%** | ✅ Matches Best |
-| **R² Score** | 0.6409 | **0.6626** | **0.6600** | ✅ Near Best |
-| **MAE** | 2.21% | **2.10%** | **2.13%** | ✅ Near Best |
-| **Action Accuracy** | 57.50% | **58.50%** | **58.00%** | ✅ Balanced |
-
-**Conclusion:** The Ensemble Model successfully captures the high directional accuracy of LightGBM while maintaining the low error rate and stability of CatBoost. It is the most robust choice for live trading.
-
----
+### Results
+This "Super Model" approach worked well. It managed to keep the high directional accuracy of the LightGBM model (77%) while pulling the error rates down closer to the CatBoost levels. It feels like the most robust option for actual trading since it balances the strengths of both.
 
 ## 4. Random Forest Model (`random_forest_model.py`)
 
-**Current Status:** ⏸️ Baseline / Alternative
+We started with this Random Forest classifier as a baseline. Unlike the others, this tries to directly classify the move into BUY, SELL, or HOLD (3 classes) rather than predicting a specific return value.
 
-### Objective
-Directly classify the next market move into **3 classes**:
-- **0 (SELL):** Return < -2%
-- **1 (HOLD):** -2% ≤ Return ≤ 2%
-- **2 (BUY):** Return > 2%
-
-### Implementation Details
-- **Type:** Random Forest Classifier (Ensemble of Decision Trees).
-- **Library:** `sklearn.ensemble.RandomForestClassifier`.
-- **Class Balancing:** Uses `class_weight='balanced'` to handle the prevalence of "HOLD" periods.
-
-### Feature Engineering
-Uses a standard set of technical indicators similar to the LightGBM model, scaled using `StandardScaler` to normalize inputs (mean=0, variance=1).
-
-### Tuning & Configuration
-- **Estimators:** 100 trees (default).
-- **Max Depth:** 10 (to prevent overfitting).
-- **Criterion:** Gini Impurity.
-
-### Performance
-- Used primarily as a baseline to benchmark the LightGBM model.
-- Generally offers lower directional accuracy compared to the boosted regression approach but provides robust probability estimates for class membership.
+It uses a similar set of technical indicators, but we found the regression approach (predicting the value first, then classifying) generally gave us more control and better results. We kept this in the codebase mainly for benchmarking purposes.
