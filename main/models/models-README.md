@@ -6,7 +6,7 @@ This directory contains the machine learning models we developed for predicting 
 
 This ended up being our primary and best-performing model. The main idea here was to predict the **5-day forward return** as a continuous value. Once we have that prediction, we classify it into BUY, SELL, or HOLD signals based on a simple threshold (we used ±2%).
 
-### Implementation & Features
+### Features
 We used a LightGBM regressor because it's generally fast and handles tabular data well. We fed it a lot of data—about a year's worth of daily OHLCV data for 14 different financial sector stocks (like JPM, GS, etc.).
 
 For features, we didn't hold back. We generated over 77 features including:
