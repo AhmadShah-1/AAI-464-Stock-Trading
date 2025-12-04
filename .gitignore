@@ -49,5 +49,8 @@ data/
 *.log
 logs/
 
-AGENTS.md
-CLAUDE.md
+docs/
+.claude/
+
+*.png
+catboost_info/
