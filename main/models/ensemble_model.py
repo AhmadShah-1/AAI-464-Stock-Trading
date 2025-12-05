@@ -126,6 +126,12 @@ class EnsembleModel:
         # Confusion matrix
         cm = confusion_matrix(actual_actions, pred_actions, labels=[0, 1, 2])
         
+        # Feature importance (Proxy using LightGBM component)
+        importance_df = pd.DataFrame({
+            'feature': self.feature_columns,
+            'importance': self.lgb_model.model.feature_importance(importance_type='gain')
+        }).sort_values('importance', ascending=False)
+        
         results = {
             'rmse': rmse,
             'mae': mae,
@@ -133,6 +139,7 @@ class EnsembleModel:
             'directional_accuracy': directional_accuracy,
             'action_accuracy': action_accuracy,
             'confusion_matrix': cm,
+            'feature_importance': importance_df,
             'predictions': predictions,
             'actuals': y_test,
             'threshold': threshold
