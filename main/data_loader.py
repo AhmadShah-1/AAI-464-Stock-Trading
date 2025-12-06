@@ -1,6 +1,6 @@
 import pandas as pd
 import alpaca_trade_api as tradeapi
-from config_karina import Config
+from main.config_karina import Config
 
 
 

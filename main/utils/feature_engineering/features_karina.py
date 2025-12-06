@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from config_karina import Config
+from main.config_karina import Config
 
 
 def compute_returns(price_df: pd.DataFrame) -> pd.DataFrame:
@@ -22,3 +22,10 @@ def estimate_mu_sigma(returns_df: pd.DataFrame):
     sigma = returns_df.cov() * Config.TRADING_DAYS_PER_YEAR
 
     return mu.values, sigma.values
+
+def shrink_covariance(sigma, shrinkage=0.2):
+    """
+    Linear shrinkage of covariance toward diagonal.
+    """
+    diag = np.diag(np.diag(sigma))
+    return (1 - shrinkage) * sigma + shrinkage * diag

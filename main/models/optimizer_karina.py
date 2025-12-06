@@ -1,6 +1,6 @@
 import cvxpy as cp
 import numpy as np
-from config_karina import Config
+from main.config_karina import Config
 
 
 def min_variance_portfolio(Sigma: np.ndarray) -> np.ndarray:
@@ -59,3 +59,25 @@ def max_sharpe_portfolio(mu: np.ndarray, Sigma: np.ndarray) -> np.ndarray:
     weights = weights / weights.sum()  # safety normalization
 
     return weights
+
+def min_variance_portfolio(sigma):
+    """
+    Long-only minimum variance portfolio with 10% cap.
+    """
+    import cvxpy as cp
+    n = sigma.shape[0]
+
+    w = cp.Variable(n)
+
+    objective = cp.Minimize(cp.quad_form(w, sigma))
+
+    constraints = [
+        cp.sum(w) == 1,
+        w >= 0,
+        w <= 0.10
+    ]
+
+    problem = cp.Problem(objective, constraints)
+    problem.solve()
+
+    return w.value

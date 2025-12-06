@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from config_karina import Config
+from main.config_karina import Config
 
 
 def portfolio_returns(returns_df: pd.DataFrame, weights: np.ndarray) -> pd.Series:

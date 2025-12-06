@@ -1,5 +1,7 @@
-from data_loader import get_top_50_us_stocks, get_price_history
-from features_karina import compute_returns, estimate_mu_sigma
+from main.data_loader import get_top_50_us_stocks, get_price_history
+from main.utils.feature_engineering.features_karina import (
+    compute_returns, estimate_mu_sigma
+)
 
 
 symbols = get_top_50_us_stocks()

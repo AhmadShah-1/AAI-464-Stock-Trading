@@ -1,4 +1,4 @@
-from data_loader import get_top_50_us_stocks, get_price_history
+from main.data_loader import get_top_50_us_stocks, get_price_history
 
 symbols = get_top_50_us_stocks()
 print("Universe size:", len(symbols))
