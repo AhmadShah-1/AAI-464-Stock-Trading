@@ -5,8 +5,8 @@ Handles connection to Alpaca's paper trading API and retrieves historical OHLCV 
 
 import pandas as pd
 from datetime import datetime, timedelta
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
+from alpaca.data.historical import StockHistoricalDataClient, NewsClient
+from alpaca.data.requests import StockBarsRequest, NewsRequest
 from alpaca.data.timeframe import TimeFrame
 from config import Config
 
@@ -14,6 +14,10 @@ class AlpacaClient:
 
     def __init__(self):
         self.client = StockHistoricalDataClient(
+            api_key=Config.ALPACA_API_KEY,
+            secret_key=Config.ALPACA_SECRET_KEY,
+        )
+        self.news_client = NewsClient(
             api_key=Config.ALPACA_API_KEY,
             secret_key=Config.ALPACA_SECRET_KEY,
         )
@@ -49,24 +53,20 @@ class AlpacaClient:
                 end=end_date
             )
             
-            # Fetch data
+            # Fetch bars
             bars = self.client.get_stock_bars(request_params)
             
             # Convert to DataFrame
             df = bars.df
             
-            # Reset index to make symbol and timestamp regular columns
-            if isinstance(df.index, pd.MultiIndex):
-                df = df.reset_index()
-            else:
-                df = df.reset_index()
+            # Reset index to make timestamp a column
+            df = df.reset_index()
             
-            # Ensure timestamp column exists and is datetime
-            if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+            # Ensure timestamp is datetime and normalized to midnight UTC
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.normalize().dt.tz_convert('UTC')
             
-            # Sort by timestamp
-            df = df.sort_values('timestamp').reset_index(drop=True)
+            # Filter for the specific symbol (in case multiple returned)
+            df = df[df['symbol'] == symbol]
             
             print(f"Successfully fetched {len(df)} trading days of data")
             print(f"Data columns: {df.columns.tolist()}")
@@ -87,3 +87,120 @@ class AlpacaClient:
         """
         df = self.fetch_historical_data(symbol, days=5)
         return df.iloc[-1]['close']
+
+    def _calculate_sentiment(self, text: str) -> float:
+        """
+        Calculate sentiment score using a simple dictionary-based approach
+        since external NLP libraries are not available.
+        """
+        if not text:
+            return 0.0
+            
+        text = text.lower()
+        
+        # Financial sentiment dictionary
+        positive_words = {
+            'surge', 'jump', 'gain', 'rise', 'rose', 'up', 'beat', 'profit', 'growth', 
+            'record', 'strong', 'buy', 'bullish', 'outperform', 'higher', 'positive', 
+            'deal', 'agreement', 'launch', 'approval', 'upgrade', 'success', 'rally',
+            'soar', 'spike', 'climb', 'recover', 'exceed', 'top', 'win'
+        }
+        
+        negative_words = {
+            'fall', 'fell', 'drop', 'loss', 'down', 'miss', 'weak', 'decline', 'sell', 
+            'bearish', 'lower', 'negative', 'crash', 'slump', 'lawsuit', 'investigation', 
+            'penalty', 'warning', 'cut', 'downgrade', 'fail', 'risk', 'concern', 'fear',
+            'uncertainty', 'plunge', 'tumble', 'sink', 'retreat', 'disappoint'
+        }
+        
+        score = 0
+        words = text.split()
+        
+        for word in words:
+            # Simple cleaning
+            word = word.strip('.,!?()[]"\'')
+            if word in positive_words:
+                score += 1
+            elif word in negative_words:
+                score -= 1
+                
+        # Normalize score between -1 and 1
+        if len(words) > 0:
+            # A score of 5 is considered very strong sentiment
+            normalized_score = max(min(score / 5.0, 1.0), -1.0)
+            return normalized_score
+        return 0.0
+
+    def fetch_news_sentiment(self, symbol: str, days: int = None) -> pd.DataFrame:
+        """
+        Fetch news and calculate daily sentiment scores.
+        
+        Returns:
+            DataFrame with columns: ['timestamp', 'news_sentiment', 'news_volume']
+            Indexed by timestamp (daily)
+        """
+        if days is None:
+            days = Config.HISTORICAL_DAYS
+            
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        try:
+            request_params = NewsRequest(
+                symbols=symbol,
+                start=start_date,
+                end=end_date,
+                limit=10000  # Max limit to get as much as possible
+            )
+            
+            news_set = self.news_client.get_news(request_params)
+            
+            # Access the actual list of news items
+            # Based on debug, news_set.data['news'] contains the list of dictionaries
+            if hasattr(news_set, 'data') and 'news' in news_set.data:
+                news_items = news_set.data['news']
+            else:
+                # Fallback if structure is different (e.g. empty)
+                news_items = []
+            
+            if not news_items:
+                return pd.DataFrame(columns=['timestamp', 'news_sentiment', 'news_volume'])
+                
+            # Process news
+            news_data = []
+            for article in news_items:
+                # Calculate sentiment from headline and summary
+                # News object attributes are accessed via dot notation
+                headline = getattr(article, 'headline', '')
+                summary = getattr(article, 'summary', '')
+                full_text = f"{headline} {summary}"
+                
+                sentiment_score = self._calculate_sentiment(full_text)
+                
+                # Use created_at for timestamp
+                timestamp = getattr(article, 'created_at', None)
+                if timestamp:
+                    timestamp = pd.to_datetime(timestamp).normalize().tz_convert('UTC')
+                
+                    news_data.append({
+                        'timestamp': timestamp,
+                        'sentiment': sentiment_score
+                    })
+                
+            news_df = pd.DataFrame(news_data)
+            
+            if news_df.empty:
+                 return pd.DataFrame(columns=['timestamp', 'news_sentiment', 'news_volume'])
+
+            # Aggregate by day
+            daily_sentiment = news_df.groupby('timestamp').agg(
+                news_sentiment=('sentiment', 'mean'),
+                news_volume=('sentiment', 'count')
+            ).reset_index()
+            
+            return daily_sentiment
+            
+        except Exception as e:
+            print(f"Error fetching news for {symbol}: {e}")
+            # Return empty DataFrame on error to avoid breaking the pipeline
+            return pd.DataFrame(columns=['timestamp', 'news_sentiment', 'news_volume'])
