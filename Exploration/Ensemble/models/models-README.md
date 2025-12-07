@@ -9,13 +9,16 @@ This ended up being our primary and best-performing model. The main idea here wa
 ### Features
 We used a LightGBM regressor because it's generally fast and handles tabular data well. We fed it a lot of data—about a year's worth of daily OHLCV data for 14 different financial sector stocks (like JPM, GS, etc.).
 
-For features, we didn't hold back. We generated over 77 features including:
-*   **Price Action:** Simple returns, log returns, and moving averages.
-*   **Momentum Indicators:** Things like RSI, MACD, and Stochastic Oscillators.
-*   **Volatility:** ATR and Bollinger Bands.
-*   **News Sentiment:** We also integrated daily sentiment scores from the Alpaca News API to try and capture market sentiment, which felt important for this sector.
+### Features
+We refined our feature engineering significantly to capture broader market dynamics and avoid "regime overfitting." We generated over 80 features including:
 
-We used a feature selection step to narrow this down to the top ~35 most relevant features to avoid overfitting, though we forced the model to keep the news sentiment features since we really wanted to test their impact.
+*   **Market Context (New):** We now explicitly model the market regime by pulling in **SPY** (Market), **VXX** (Volatility Index), and **XLF** (Financial Sector). Key features include *Beta to SPY*, *Relative Strength*, and *VXX Trend*. This helps the model distinguish between a stock-specific move and a broad market rally/crash.
+*   **Cyclical Time:** We replaced raw calendar features (like Month/Quarter) with **Cyclical Sine/Cosine Encodings** for the day of the week. We removed long-term time features to prevent the model from memorizing specific past months.
+*   **Technical Indicators:** RSI, MACD, Bollinger Bands, ATR, Stochastic Oscillators, etc.
+*   **Volume & Volatility:** Relative volume, VWAP distance, and volatility stability.
+*   **News Sentiment:** Daily sentiment scores from the Alpaca News API.
+
+We used a feature selection step to narrow this down, though we prioritized Market Context and Sentiment features.
 
 ### Performance
 After tuning hyperparameters with Optuna (running about 100 trials), we got some pretty solid results:
