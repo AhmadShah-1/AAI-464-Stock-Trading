@@ -396,19 +396,28 @@ class LightGBMRegressionModel:
         # Create datasets
         train_data = lgb.Dataset(X_train, label=y_train)
         valid_sets = [train_data]
+        valid_names = ['training']
         
         if X_val is not None and y_val is not None:
             valid_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
             valid_sets.append(valid_data)
+            valid_names.append('valid')
         
         # Train model
+        evals_result = {}
         self.model = lgb.train(
             self.params,
             train_data,
             num_boost_round=self.n_estimators,
             valid_sets=valid_sets,
-            callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=False)]
+            valid_names=valid_names,
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=50, verbose=False),
+                lgb.record_evaluation(evals_result)
+            ]
         )
+        
+        self.evals_result = evals_result
         
         self.is_trained = True
         

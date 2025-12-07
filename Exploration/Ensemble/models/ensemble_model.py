@@ -219,7 +219,72 @@ class EnsembleModel:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"\n✅ Plots saved to: {save_path}")
         
-        plt.show()
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"\n✅ Training history plots saved to: {save_path}")
+            
+        # plt.show()
+    
+    
+    def plot_training_history(self, save_path=None):
+        """Plot training and validation error curves for sub-models."""
+        if not self.is_trained:
+            print("Model not trained yet.")
+            return
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # --- LightGBM History ---
+        if hasattr(self.lgb_model, 'evals_result') and self.lgb_model.evals_result:
+            lgb_res = self.lgb_model.evals_result
+            # LightGBM keys are 'training', 'valid' (as set in valid_names)
+            # Metric is 'rmse'
+            metric = 'rmse'
+            if 'training' in lgb_res:
+                epochs = range(len(lgb_res['training'][metric]))
+                axes[0].plot(epochs, lgb_res['training'][metric], label='Train RMSE', color='blue')
+                if 'valid' in lgb_res:
+                    axes[0].plot(epochs, lgb_res['valid'][metric], label='Val RMSE', color='orange')
+                axes[0].set_title('LightGBM Training History')
+                axes[0].set_xlabel('Iterations')
+                axes[0].set_ylabel('RMSE')
+                axes[0].legend()
+                axes[0].grid(True, alpha=0.3)
+        else:
+            axes[0].text(0.5, 0.5, 'LightGBM history not available', ha='center')
+
+        # --- CatBoost History ---
+        if hasattr(self.cat_model, 'evals_result') and self.cat_model.evals_result:
+            cat_res = self.cat_model.evals_result
+            # CatBoost keys: 'learn', 'validation' (or 'test')
+            metric = 'RMSE' # Based on loss_function parameter
+            if 'learn' in cat_res:
+                axes[1].plot(cat_res['learn'][metric], label='Train RMSE', color='blue')
+            
+            # Plot validation curves (keys might vary, usually 'learn' is train)
+            for key in cat_res:
+                if key != 'learn':
+                    axes[1].plot(cat_res[key][metric], label=f'Val ({key}) RMSE', color='orange')
+            
+            axes[1].set_title('CatBoost Training History')
+            axes[1].set_xlabel('Iterations')
+            axes[1].set_ylabel('RMSE')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+        else:
+            axes[1].text(0.5, 0.5, 'CatBoost history not available', ha='center')
+
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"\n✅ Training history plots saved to: {save_path}")
+            
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"\n✅ Training history plots saved to: {save_path}")
+            
+        # plt.show()
 
 
 # ====================================================================================
@@ -286,5 +351,8 @@ if __name__ == "__main__":
     results = model.evaluate(X_test, y_test)
     model.print_evaluation(results)
     
-    # Plot
+    # Plot Evaluation Results
     model.plot_results(results, save_path='ensemble_results.png')
+    
+    # Plot Training History
+    model.plot_training_history(save_path='training_history.png')

@@ -357,6 +357,8 @@ class CatBoostRegressionModel:
             verbose=100
         )
         
+        self.evals_result = self.model.get_evals_result()
+        
         self.is_trained = True
         
         print(f"\n✅ Training complete!")
