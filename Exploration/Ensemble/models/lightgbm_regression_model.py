@@ -282,14 +282,23 @@ class LightGBMRegressionModel:
         df['trade_intensity'] = df['trade_count'] / df['volume']
         df['avg_trade_size'] = df['volume'] / df['trade_count']
         
-        # === 6. TIME-BASED FEATURES (5) ===
+        # === 6. TIME-BASED FEATURES (Cyclical Encoding) ===
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df['day_of_week'] = df['timestamp'].dt.dayofweek
-            df['week_of_month'] = (df['timestamp'].dt.day - 1) // 7 + 1
-            df['month'] = df['timestamp'].dt.month
-            df['quarter'] = df['timestamp'].dt.quarter
-            # Last 3 trading days of month
+            
+            # Extract raw components first
+            day_of_week = df['timestamp'].dt.dayofweek
+            month = df['timestamp'].dt.month
+            
+            # Cyclical encoding for Day of Week (0-4, 5 days)
+            df['day_of_week_sin'] = np.sin(2 * np.pi * day_of_week / 5)
+            df['day_of_week_cos'] = np.cos(2 * np.pi * day_of_week / 5)
+            
+            # Cyclical encoding for Month (1-12)
+            df['month_sin'] = np.sin(2 * np.pi * month / 12)
+            df['month_cos'] = np.cos(2 * np.pi * month / 12)
+            
+            # Last 3 trading days of month (Retain as binary signal)
             df['is_month_end'] = (df['timestamp'].dt.is_month_end | 
                                   (df['timestamp'] + pd.Timedelta(days=1)).dt.is_month_end |
                                   (df['timestamp'] + pd.Timedelta(days=2)).dt.is_month_end).astype(int)
