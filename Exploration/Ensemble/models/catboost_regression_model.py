@@ -235,6 +235,37 @@ class CatBoostRegressionModel:
         df['volatility_ratio'] = df['volatility_5'] / df['volatility_10']
         df['volatility_breakout'] = (df['volatility_10'] > df['volatility_10'].rolling(50).mean() + 2*df['volatility_10'].rolling(50).std()).astype(int)
         
+        # === 5. NEW: MARKET CONTEXT FEATURES (SPY, VXX, XLF) ===
+        # These are crucial for handling market regimes
+        
+        if 'close_SPY' in df.columns:
+            # SPY Returns & Trend
+            df['spy_return_1d'] = df['close_SPY'].pct_change()
+            df['spy_return_5d'] = df['close_SPY'].pct_change(5)
+            
+            # Beta (Rolling 20 days)
+            # Covariance(stock, spy) / Variance(spy)
+            rolling_cov = df['returns'].rolling(20).cov(df['spy_return_1d'])
+            rolling_var = df['spy_return_1d'].rolling(20).var()
+            df['beta_spy'] = rolling_cov / rolling_var
+            
+            # Relative Strength (Stock Return - SPY Return)
+            df['relative_strength_5d'] = df['roc_5'] - df['spy_return_5d']
+            
+            # Correlation with Market
+            df['corr_spy_20'] = df['returns'].rolling(20).corr(df['spy_return_1d'])
+
+        if 'close_VXX' in df.columns:
+            # VXX Trend (Fear Gauge)
+            df['vxx_level'] = df['close_VXX']
+            df['vxx_change_5d'] = df['close_VXX'].pct_change(5)
+            df['vxx_relative'] = df['close_VXX'] / df['close_VXX'].rolling(20).mean()
+
+        if 'close_XLF' in df.columns:
+            # Sector Performance
+            df['sector_return_5d'] = df['close_XLF'].pct_change(5)
+            df['sector_relative_str'] = df['roc_5'] - df['sector_return_5d']
+        
         # === 5. MARKET MICROSTRUCTURE FEATURES (4) ===
         df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap']
         df['price_efficiency'] = df['close'] / (df['high'] - df['low']).rolling(20).sum()
@@ -242,26 +273,22 @@ class CatBoostRegressionModel:
         df['avg_trade_size'] = df['volume'] / df['trade_count']
         
         # === 6. TIME-BASED FEATURES (Cyclical Encoding) ===
+        # REVISED STRATEGY: Only Day of Week. Month/Quarter are noise for 5-day horizon.
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             
             # Extract raw components first
             day_of_week = df['timestamp'].dt.dayofweek
-            month = df['timestamp'].dt.month
             
             # Cyclical encoding for Day of Week (0-4, 5 days)
             df['day_of_week_sin'] = np.sin(2 * np.pi * day_of_week / 5)
             df['day_of_week_cos'] = np.cos(2 * np.pi * day_of_week / 5)
             
-            # Cyclical encoding for Month (1-12)
-            df['month_sin'] = np.sin(2 * np.pi * month / 12)
-            df['month_cos'] = np.cos(2 * np.pi * month / 12)
-            
             # Last 3 trading days of month (Retain as binary signal)
             df['is_month_end'] = (df['timestamp'].dt.is_month_end | 
                                   (df['timestamp'] + pd.Timedelta(days=1)).dt.is_month_end |
                                   (df['timestamp'] + pd.Timedelta(days=2)).dt.is_month_end).astype(int)
-                                  
+        
         # === 7. NEWS SENTIMENT FEATURES (New) ===
         if 'news_sentiment' in df.columns:
             # Sentiment momentum (change in sentiment)
