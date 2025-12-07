@@ -16,8 +16,6 @@ import sys
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add parent directory to path for imports
-# Pointing to main directory for utils and config
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
@@ -43,7 +41,6 @@ class EnsembleModel:
         self.lgb_weight = lgb_weight
         self.cat_weight = cat_weight
         
-        # Initialize sub-models
         self.lgb_model = LightGBMRegressionModel(use_tuned_params=False) # Baseline often generalizes better
         self.cat_model = CatBoostRegressionModel()
         
@@ -58,7 +55,6 @@ class EnsembleModel:
     
     def prepare_data(self, df, forward_days=5):
         """Prepare data using one of the sub-models."""
-        # Both models use the same feature engineering pipeline now
         return self.cat_model.prepare_data(df, forward_days)
     
     
@@ -68,11 +64,9 @@ class EnsembleModel:
         print("TRAINING ENSEMBLE MODEL")
         print("="*70)
         
-        # Train LightGBM
         print("\n>>> Training LightGBM Component...")
         self.lgb_model.train(X_train, y_train, X_val, y_val)
         
-        # Train CatBoost
         print("\n>>> Training CatBoost Component...")
         self.cat_model.train(X_train, y_train, X_val, y_val)
         
@@ -87,11 +81,9 @@ class EnsembleModel:
         if not self.is_trained:
             raise RuntimeError("Model must be trained before making predictions")
         
-        # Get individual predictions
         pred_lgb = self.lgb_model.predict(X)
         pred_cat = self.cat_model.predict(X)
         
-        # Weighted average
         final_pred = (pred_lgb * self.lgb_weight) + (pred_cat * self.cat_weight)
         
         return final_pred
@@ -112,13 +104,11 @@ class EnsembleModel:
         """Comprehensive ensemble evaluation."""
         predictions = self.predict(X_test)
         
-        # Regression metrics
         rmse = np.sqrt(mean_squared_error(y_test, predictions))
         mae = mean_absolute_error(y_test, predictions)
         r2 = r2_score(y_test, predictions)
         directional_accuracy = np.mean(np.sign(predictions) == np.sign(y_test))
         
-        # Trading signal metrics
         pred_actions = self.predict_action(X_test, threshold)
         
         actual_actions = np.ones(len(y_test), dtype=int)
@@ -127,10 +117,8 @@ class EnsembleModel:
         
         action_accuracy = np.mean(pred_actions == actual_actions)
         
-        # Confusion matrix
         cm = confusion_matrix(actual_actions, pred_actions, labels=[0, 1, 2])
         
-        # Feature importance (Proxy using LightGBM component)
         importance_df = pd.DataFrame({
             'feature': self.feature_columns,
             'importance': self.lgb_model.model.feature_importance(importance_type='gain')
@@ -181,7 +169,6 @@ class EnsembleModel:
         fig, axes = plt.subplots(2, 2, figsize=(18, 10))
         axes = axes.flatten()
         
-        # Plot 1: Predicted vs Actual (Scatter)
         axes[0].scatter(results['actuals'], results['predictions'], alpha=0.5, color='purple')
         axes[0].plot([results['actuals'].min(), results['actuals'].max()],
                      [results['actuals'].min(), results['actuals'].max()],
@@ -192,7 +179,6 @@ class EnsembleModel:
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
         
-        # Plot 2: Time Series
         time_index = range(len(results['predictions']))
         axes[1].plot(time_index, results['actuals'], 'b-', label='Actual', alpha=0.6)
         axes[1].plot(time_index, results['predictions'], 'purple', linestyle='--', label='Ensemble Prediction', alpha=0.8)
@@ -201,14 +187,12 @@ class EnsembleModel:
         axes[1].legend()
         axes[1].grid(True, alpha=0.3)
         
-        # Plot 3: Error Distribution
         errors = results['predictions'] - results['actuals']
         axes[2].hist(errors, bins=50, edgecolor='black', alpha=0.7, color='purple')
         axes[2].axvline(0, color='red', linestyle='--', lw=2)
         axes[2].set_title(f'Error Distribution\nMAE = {results["mae"]:.4f}')
         axes[2].grid(True, alpha=0.3)
         
-        # Plot 4: Empty for now (or could plot model contributions)
         axes[3].text(0.5, 0.5, 'Ensemble Model\n(LightGBM + CatBoost)', 
                      horizontalalignment='center', verticalalignment='center', fontsize=15)
         axes[3].axis('off')
@@ -223,7 +207,6 @@ class EnsembleModel:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"\n✅ Training history plots saved to: {save_path}")
             
-        # plt.show()
     
     
     def plot_training_history(self, save_path=None):
@@ -234,11 +217,8 @@ class EnsembleModel:
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         
-        # --- LightGBM History ---
         if hasattr(self.lgb_model, 'evals_result') and self.lgb_model.evals_result:
             lgb_res = self.lgb_model.evals_result
-            # LightGBM keys are 'training', 'valid' (as set in valid_names)
-            # Metric is 'rmse'
             metric = 'rmse'
             if 'training' in lgb_res:
                 epochs = range(len(lgb_res['training'][metric]))
@@ -253,15 +233,12 @@ class EnsembleModel:
         else:
             axes[0].text(0.5, 0.5, 'LightGBM history not available', ha='center')
 
-        # --- CatBoost History ---
         if hasattr(self.cat_model, 'evals_result') and self.cat_model.evals_result:
             cat_res = self.cat_model.evals_result
-            # CatBoost keys: 'learn', 'validation' (or 'test')
             metric = 'RMSE' # Based on loss_function parameter
             if 'learn' in cat_res:
                 axes[1].plot(cat_res['learn'][metric], label='Train RMSE', color='blue')
             
-            # Plot validation curves (keys might vary, usually 'learn' is train)
             for key in cat_res:
                 if key != 'learn':
                     axes[1].plot(cat_res[key][metric], label=f'Val ({key}) RMSE', color='orange')
@@ -284,16 +261,11 @@ class EnsembleModel:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"\n✅ Training history plots saved to: {save_path}")
             
-        # plt.show()
 
 
-# ====================================================================================
-# MAIN EXECUTION
-# ====================================================================================
 
 if __name__ == "__main__":
     
-    # Configuration
     TRAIN_SYMBOLS = [
         'BAC', 'JPM', 'WFC', 'GS', 'MS', 'USB', 'PNC', 'AXP', 'COF', 'SCHW', 'BLK', 'BK', 'STT', 'TFC'
     ]
@@ -301,34 +273,25 @@ if __name__ == "__main__":
     FORWARD_DAYS = 5
     FETCH_NEW_DATA = True
     
-    # Initialize Ensemble
-    # We give slightly more weight to CatBoost because it had better R2 and Action Accuracy
     model = EnsembleModel(lgb_weight=0.4, cat_weight=0.6)
     
-    # Load/Fetch Data
     if FETCH_NEW_DATA:
         train_df, test_df = model.fetch_data(TRAIN_SYMBOLS, TEST_SYMBOLS)
     else:
-        # Fallback to CSV loading logic if needed (omitted for brevity, same as others)
         pass
         
-    # Feature Engineering
     print("\nCreating features...")
-    # We can use either model's prepare_data since they are identical now
     train_features = model.prepare_data(train_df, FORWARD_DAYS).dropna()
     test_features = model.prepare_data(test_df, FORWARD_DAYS).dropna()
     
-    # Feature Selection (Same logic as before)
     exclude_cols = ['target', 'forward_returns', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
     all_feature_cols = [col for col in train_features.columns if col not in exclude_cols]
     
-    # Correlation Analysis
     correlations = train_features[all_feature_cols + ['target']].corr()['target'].drop('target')
     correlations_abs = correlations.abs().sort_values(ascending=False)
     TOP_N_FEATURES = 35
     top_features = correlations_abs.head(TOP_N_FEATURES).index.tolist()
     
-    # Force News Features
     news_features = ['news_sentiment', 'news_volume', 'sentiment_momentum', 'sentiment_ma_5', 'high_news_volume', 'sentiment_impact']
     forced_news_features = [f for f in news_features if f in all_feature_cols]
     for f in forced_news_features:
@@ -338,21 +301,16 @@ if __name__ == "__main__":
     feature_cols = top_features
     print(f"\n✅ Selected {len(feature_cols)} features for training")
     
-    # Prepare X and y
     X_train = train_features[feature_cols]
     y_train = train_features['target']
     X_test = test_features[feature_cols]
     y_test = test_features['target']
     
-    # Train
     model.train(X_train, y_train, X_test, y_test)
     
-    # Evaluate
     results = model.evaluate(X_test, y_test)
     model.print_evaluation(results)
     
-    # Plot Evaluation Results
     model.plot_results(results, save_path='ensemble_results.png')
     
-    # Plot Training History
     model.plot_training_history(save_path='training_history.png')

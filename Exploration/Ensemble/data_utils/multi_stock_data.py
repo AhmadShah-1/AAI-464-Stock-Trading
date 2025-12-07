@@ -8,7 +8,6 @@ import numpy as np
 from typing import List
 import sys
 import os
-# Add main directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
 from utils.alpaca_client import AlpacaClient
 
@@ -35,13 +34,11 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
     print(f"Market Indicators: {', '.join(market_symbols)}")
     print(f"Days per stock: {days if days else 'default'}\n")
 
-    # 1. Fetch Market Context First
     print("Fetching Market Indicators...")
     for msym in market_symbols:
         try:
             print(f"  Fetching {msym}...")
             df = client.fetch_historical_data(msym, days=days)
-            # Standardize timestamp
             if df['timestamp'].dt.tz is None:
                 df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
             else:
@@ -51,37 +48,29 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
         except Exception as e:
             print(f"  ✗ Failed to fetch {msym}: {e}")
 
-    # 2. Fetch Target Stocks
     all_data = []
     print("\nFetching Target Stocks...")
 
     for symbol in symbols:
         try:
-            # Fetch data for this symbol
             df = client.fetch_historical_data(symbol, days=days)
 
-            # Add symbol identifier
             df['symbol'] = symbol
             
-            # Standardize timestamp
             if df['timestamp'].dt.tz is None:
                 df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
             else:
                 df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
             
-            # Fetch News Sentiment
             print(f"    Fetching news for {symbol}...\n") # Newline for cleaner output
             news_df = client.fetch_news_sentiment(symbol, days=days)
             
             if not news_df.empty:
-                # Merge news data
                 if news_df['timestamp'].dt.tz is None:
                     news_df['timestamp'] = news_df['timestamp'].dt.tz_localize('UTC')
                 
-                # Merge on timestamp
                 df = pd.merge(df, news_df, on='timestamp', how='left')
                 
-                # Fill NaN news values with 0
                 df['news_sentiment'] = df['news_sentiment'].fillna(0)
                 df['news_volume'] = df['news_volume'].fillna(0)
                 
@@ -91,9 +80,7 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
                 df['news_volume'] = 0
                 print(f"    - No news data found")
 
-            # 3. Merge Market Context
             for msym, mdf in market_dfs.items():
-                # Suffix columns like close_SPY, volume_SPY
                 suffix = f"_{msym}"
                 mdf_renamed = mdf.rename(columns={
                     'close': f'close{suffix}',
@@ -104,7 +91,6 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
                 
                 df = pd.merge(df, mdf_renamed, on='timestamp', how='left')
                 
-                # Forward fill missing market data
                 cols_to_fill = [c for c in mdf_renamed.columns if c != 'timestamp']
                 df[cols_to_fill] = df[cols_to_fill].fillna(method='ffill')
 
@@ -119,10 +105,8 @@ def fetch_multi_stock_data(symbols: List[str], days: int = None) -> pd.DataFrame
     if not all_data:
         raise ValueError("Failed to fetch data for any stocks")
 
-    # Combine all dataframes
     combined_df = pd.concat(all_data, ignore_index=True)
 
-    # Sort by timestamp to maintain temporal order
     combined_df = combined_df.sort_values('timestamp').reset_index(drop=True)
 
     print(f"\nCombined dataset:")
@@ -146,7 +130,6 @@ def split_by_stock(df: pd.DataFrame, train_symbols: List[str], test_symbols: Lis
     Returns:
         Tuple of (train_df, test_df)
     """
-    # Filter by symbols
     train_df = df[df['symbol'].isin(train_symbols)].reset_index(drop=True)
     test_df = df[df['symbol'].isin(test_symbols)].reset_index(drop=True)
 
