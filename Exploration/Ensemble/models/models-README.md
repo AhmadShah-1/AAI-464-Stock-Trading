@@ -37,9 +37,3 @@ We gave CatBoost slightly more weight (60%) because of its stability, with Light
 
 ### Results
 This "Super Model" approach worked well. It managed to keep the high directional accuracy of the LightGBM model (77%) while pulling the error rates down closer to the CatBoost levels. It feels like the most robust option for actual trading since it balances the strengths of both.
-
-## 4. Random Forest Model (`random_forest_model.py`)
-
-We started with this Random Forest classifier as a baseline. Unlike the others, this tries to directly classify the move into BUY, SELL, or HOLD (3 classes) rather than predicting a specific return value.
-
-It uses a similar set of technical indicators, but we found the regression approach (predicting the value first, then classifying) generally gave us more control and better results. We kept this in the codebase mainly for benchmarking purposes.

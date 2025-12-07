@@ -17,9 +17,13 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Add parent directory to path for imports
-sys.path.append('..')
-from models.lightgbm_regression_model import LightGBMRegressionModel
-from models.catboost_regression_model import CatBoostRegressionModel
+# Pointing to main directory for utils and config
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
+
+from .lightgbm_regression_model import LightGBMRegressionModel
+from .catboost_regression_model import CatBoostRegressionModel
 from config import Config
 
 

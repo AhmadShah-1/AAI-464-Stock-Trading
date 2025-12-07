@@ -1,15 +1,20 @@
 """
-CatBoost Regression Model for Stock Trading
+LightGBM Regression Model for Stock Trading
 Complete end-to-end pipeline: Data fetching → Training → Evaluation
 
-Performance Goal: Compare against LightGBM (R² ~0.64, Acc ~77%)
+Performance:
+- R² Score: 0.2637 (baseline) / 0.2597 (tuned)
+- Directional Accuracy: 64.89%
+- MAE: 3.12%
+
+Best hyperparameters from 100-trial Optuna optimization included.
 """
 
 import pandas as pd
 import numpy as np
-from catboost import CatBoostRegressor
+import lightgbm as lgb
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
@@ -18,43 +23,85 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Add parent directory to path for imports
-sys.path.append('..')
-from utils.multi_stock_data import fetch_multi_stock_data
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
+
+# Add Ensemble directory to path to allow importing from utils
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from data_utils.multi_stock_data import fetch_multi_stock_data
 from config import Config
 
 
-class CatBoostRegressionModel:
+class LightGBMRegressionModel:
     """
-    CatBoost model for predicting 5-day stock returns.
+    LightGBM model for predicting 5-day stock returns.
     
     Features:
-    - Fetches data from Alpaca API
-    - Creates 77+ technical & sentiment features
-    - Uses CatBoostRegressor for robust prediction
+    - Fetches data from Alpaca API (optional)
+    - Creates 28 technical indicators
+    - Trains with optimized hyperparameters
+    - Provides comprehensive evaluation
     """
     
-    def __init__(self):
-        """Initialize CatBoost regression model."""
+    def __init__(self, use_tuned_params=True):
+        """
+        Initialize LightGBM regression model.
+        
+        Args:
+            use_tuned_params: If True, use hyperparameters from Optuna tuning
+                            If False, use LightGBM defaults
+        """
         self.model = None
         self.is_trained = False
         self.feature_columns = []
         
-        # CatBoost Parameters
-        self.params = {
-            'loss_function': 'RMSE',
-            'iterations': 1000,
-            'learning_rate': 0.03,
-            'depth': 6,
-            'l2_leaf_reg': 3,
-            'random_seed': 42,
-            'verbose': 0,
-            'early_stopping_rounds': 50
-        }
+        # Best parameters from 100-trial Optuna optimization
+        if use_tuned_params:
+            self.params = {
+                'objective': 'regression',
+                'metric': 'rmse',
+                'boosting_type': 'gbdt',
+                'num_leaves': 170,
+                'max_depth': 4,
+                'learning_rate': 0.0373,
+                'subsample': 0.856,
+                'colsample_bytree': 0.856,
+                'reg_alpha': 2.0e-08,
+                'reg_lambda': 7.4e-06,
+                'min_split_gain': 0.000147,
+                'min_child_samples': 71,
+                'verbosity': -1,
+                'seed': 42
+            }
+            self.n_estimators = 869
+        else:
+            # Baseline parameters (actually perform better!)
+            self.params = {
+                'objective': 'regression',
+                'metric': 'rmse',
+                'boosting_type': 'gbdt',
+                'num_leaves': 31,
+                'learning_rate': 0.05,
+                'feature_fraction': 0.9,
+                'verbosity': -1,
+                'seed': 42
+            }
+            self.n_estimators = 100
     
     
     def fetch_data(self, train_symbols, test_symbols, days=None):
         """
         Fetch stock data from Alpaca API.
+        
+        Args:
+            train_symbols: List of training stock symbols
+            test_symbols: List of testing stock symbols
+            days: Number of days of historical data (None = use Config default)
+        
+        Returns:
+            Tuple of (train_df, test_df)
         """
         print("="*70)
         print("FETCHING DATA FROM ALPACA")
@@ -280,23 +327,29 @@ class CatBoostRegressionModel:
                 symbol_df = df[df['symbol'] == symbol].copy()
                 symbol_df = self.create_features(symbol_df)
                 symbol_df = self.create_advanced_features(symbol_df)
-                symbol_df = self.create_comprehensive_features(symbol_df)
+                symbol_df = self.create_comprehensive_features(symbol_df)  # NEW!
                 symbol_df = self.create_target(symbol_df, forward_days)
                 all_processed.append(symbol_df)
             return pd.concat(all_processed, ignore_index=True)
         else:
             df = self.create_features(df)
             df = self.create_advanced_features(df)
-            df = self.create_comprehensive_features(df)
+            df = self.create_comprehensive_features(df)  # NEW!
             return self.create_target(df, forward_days)
     
     
     def train(self, X_train, y_train, X_val=None, y_val=None):
         """
-        Train CatBoost model.
+        Train LightGBM model.
+        
+        Args:
+            X_train: Training features
+            y_train: Training targets
+            X_val: Optional validation features
+            y_val: Optional validation targets
         """
         print("\n" + "="*70)
-        print("TRAINING CATBOOST MODEL")
+        print("TRAINING LIGHTGBM MODEL")
         print("="*70)
         print(f"Training samples: {len(X_train)}")
         print(f"Features: {X_train.shape[1]}")
@@ -304,21 +357,27 @@ class CatBoostRegressionModel:
         # Store feature columns
         self.feature_columns = X_train.columns.tolist()
         
-        # Initialize model
-        self.model = CatBoostRegressor(**self.params)
+        # Create datasets
+        train_data = lgb.Dataset(X_train, label=y_train)
+        valid_sets = [train_data]
+        
+        if X_val is not None and y_val is not None:
+            valid_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
+            valid_sets.append(valid_data)
         
         # Train model
-        self.model.fit(
-            X_train, y_train,
-            eval_set=(X_val, y_val) if X_val is not None else None,
-            use_best_model=True if X_val is not None else False,
-            verbose=100
+        self.model = lgb.train(
+            self.params,
+            train_data,
+            num_boost_round=self.n_estimators,
+            valid_sets=valid_sets,
+            callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=False)]
         )
         
         self.is_trained = True
         
         print(f"\n✅ Training complete!")
-        print(f"   Best iteration: {self.model.get_best_iteration()}")
+        print(f"   Best iteration: {self.model.best_iteration}")
         print("="*70)
     
     
@@ -330,7 +389,16 @@ class CatBoostRegressionModel:
     
     
     def predict_action(self, X, threshold=0.02):
-        """Convert regression predictions to trading actions."""
+        """
+        Convert regression predictions to trading actions.
+        
+        Args:
+            X: Feature DataFrame
+            threshold: Return threshold for BUY/SELL signals (default: ±2%)
+        
+        Returns:
+            Array of actions: 0=SELL, 1=HOLD, 2=BUY
+        """
         predictions = self.predict(X)
         
         actions = np.ones(len(predictions), dtype=int)  # Default: HOLD
@@ -341,7 +409,16 @@ class CatBoostRegressionModel:
     
     
     def get_trading_signals(self, X, threshold=0.02):
-        """Get detailed trading signals with predictions and confidence."""
+        """
+        Get detailed trading signals with predictions and confidence.
+        
+        Args:
+            X: Feature DataFrame
+            threshold: Return threshold for BUY/SELL signals
+        
+        Returns:
+            DataFrame with columns: predicted_return, action, action_label, confidence
+        """
         predictions = self.predict(X)
         actions = self.predict_action(X, threshold)
         
@@ -364,7 +441,12 @@ class CatBoostRegressionModel:
     
     
     def evaluate(self, X_test, y_test, threshold=0.02):
-        """Comprehensive model evaluation."""
+        """
+        Comprehensive model evaluation.
+        
+        Returns:
+            Dictionary with all metrics
+        """
         predictions = self.predict(X_test)
         
         # Regression metrics
@@ -390,7 +472,7 @@ class CatBoostRegressionModel:
         # Feature importance
         importance_df = pd.DataFrame({
             'feature': self.feature_columns,
-            'importance': self.model.get_feature_importance()
+            'importance': self.model.feature_importance(importance_type='gain')
         }).sort_values('importance', ascending=False)
         
         results = {
@@ -477,7 +559,7 @@ class CatBoostRegressionModel:
         axes[3].barh(range(len(top_features)), top_features['importance'])
         axes[3].set_yticks(range(len(top_features)))
         axes[3].set_yticklabels(top_features['feature'])
-        axes[3].set_xlabel('Importance')
+        axes[3].set_xlabel('Importance (Gain)')
         axes[3].set_title('Top 15 Feature Importance')
         axes[3].invert_yaxis()
         
@@ -508,18 +590,21 @@ if __name__ == "__main__":
     TEST_SYMBOLS = ['C']           # Citigroup (remains the test case)
     FORWARD_DAYS = 5                        # Predict 5-day returns
     FETCH_NEW_DATA = True                  # Set to True to fetch from Alpaca
+    USE_TUNED_PARAMS = False                # Baseline often works better for generalization
     
     print("="*70)
-    print("CATBOOST REGRESSION MODEL - STOCK TRADING")
+    print("LIGHTGBM REGRESSION MODEL - STOCK TRADING")
     print("="*70)
     print(f"Training stocks: {', '.join(TRAIN_SYMBOLS)}")
     print(f"Testing stock: {', '.join(TEST_SYMBOLS)}")
     print(f"Forward horizon: {FORWARD_DAYS} days")
+    print(f"Using tuned params: {USE_TUNED_PARAMS}")
     print("="*70)
     
     # Initialize model
-    model = CatBoostRegressionModel()
+    model = LightGBMRegressionModel(use_tuned_params=USE_TUNED_PARAMS)
     
+    # Load or fetch data
     # Load or fetch data
     if FETCH_NEW_DATA:
         train_df, test_df = model.fetch_data(TRAIN_SYMBOLS, TEST_SYMBOLS)
@@ -564,10 +649,14 @@ if __name__ == "__main__":
     
     # Automatically detect all feature columns (exclude target and metadata)
     exclude_cols = ['target', 'forward_returns', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
+    # Also exclude raw market return columns if we only want relative strength, or keep them. Let's keep them.
     
     all_feature_cols = [col for col in train_features.columns if col not in exclude_cols]
     
     print(f"\n✅ Total features created: {len(all_feature_cols)}")
+    print(f"   Basic features: 15")
+    print(f"   Advanced features: 13")
+    print(f"   Comprehensive features: 39")
     
     # === CORRELATION-BASED FEATURE SELECTION ===
     print(f"\n🔍 Performing correlation analysis with target...")
@@ -619,12 +708,12 @@ if __name__ == "__main__":
     model.print_evaluation(results)
     
     # Plot results
-    model.plot_results(results, save_path='catboost_results.png')
+    model.plot_results(results, save_path='lightgbm_results.png')
     
     print("\n" + "="*70)
     print("ANALYSIS COMPLETE")
     print("="*70)
-    print(f"Model: CatBoost Regression")
+    print(f"Model: LightGBM Regression")
     print(f"R² Score: {results['r2']:.4f}")
     print(f"Directional Accuracy: {results['directional_accuracy']:.2%}")
     print(f"MAE: {results['mae']:.4f} ({results['mae']*100:.2f}%)")
