@@ -1,39 +1,49 @@
 # Stock Prediction Models
 
-This directory contains the machine learning models we developed for predicting stock prices and generating trading signals. We experimented with a few different approaches, primarily focusing on regression models to predict future returns, which we then converted into trading signals.
+This directory contains the machine learning components designed to predict 5-day forward stock returns for our banking sector basket. We moved from single models to a weighted ensemble approach to balance variance and bias.
 
-## 1. LightGBM Regression Model (`lightgbm_regression_model.py`)
+## 1. Feature Engineering Strategy
+We overhauled the feature pipeline to address "regime overfitting." Instead of just technical indicators, we now explicitly model the market environment:
+*   **Market Context:** We pull data for **SPY** (Market), **VXX** (Volatility), and **XLF** (Financial Sector). We calculate features like *Beta*, *Relative Strength*, and *Sector Correlation* to help the model ignore noise during broad market moves.
+*   **Cyclical Time:** Calendar dates (Month, Day of Week) are encoded as Sine/Cosine waves to preserve continuity.
+*   **News Sentiment:** We force the inclusion of sentiment scores (derived from Alpaca news) to capture external shocks.
 
-This ended up being our primary and best-performing model. The main idea here was to predict the **5-day forward return** as a continuous value. Once we have that prediction, we classify it into BUY, SELL, or HOLD signals based on a simple threshold (we used ±2%).
+## 2. Model Implementations
 
-### Features
-We used a LightGBM regressor because it's generally fast and handles tabular data well. We fed it a lot of data—about a year's worth of daily OHLCV data for 14 different financial sector stocks (like JPM, GS, etc.).
+### LightGBM Regressor (`lightgbm_regression_model.py`)
+Our primary gradient boosting model. It's fast and effective on tabular data.
+-   **Configuration:** Optimized using `tune_hyperparameters.py`. We found that a lower learning rate (~0.033) and higher regularization (`reg_alpha`, `reg_lambda`) significantly improved generalization on unseen data.
+-   **Training Tracking:** Now supports `plot_training_history()` to visualize RMSE curves and detect overfitting early.
 
-For features, we didn't hold back. We generated over 77 features including:
-*   **Price Action:** Simple returns, log returns, and moving averages.
-*   **Momentum Indicators:** Things like RSI, MACD, and Stochastic Oscillators.
-*   **Volatility:** ATR and Bollinger Bands.
-*   **News Sentiment:** We also integrated daily sentiment scores from the Alpaca News API to try and capture market sentiment, which felt important for this sector.
+### CatBoost Regressor (`catboost_regression_model.py`)
+Used for its superior handling of noisy data and stability.
+-   **Configuration:** We tuned this to be the "conservative" partner in the ensemble. It uses a very low learning rate (~0.009) and deep trees (Depth 10) with strict regularization.
+-   **Role:** Provides a stable baseline prediction that dampens the volatility of LightGBM's outputs.
 
-We used a feature selection step to narrow this down to the top ~35 most relevant features to avoid overfitting, though we forced the model to keep the news sentiment features since we really wanted to test their impact.
+### Ensemble Model (`ensemble_model.py`)
+Combines the two models using a weighted average strategy (**40% LightGBM / 60% CatBoost**).
+-   **Logic:** $Prediction = (0.4 * LightGBM) + (0.6 * CatBoost)$
+-   **Trading Logic:** Converts the continuous return prediction into signals:
+    -   **BUY:** Predicted Return > +2.0%
+    -   **SELL:** Predicted Return < -2.0%
+    -   **HOLD:** Between -2% and +2%
 
-### Performance
-After tuning hyperparameters with Optuna (running about 100 trials), we got some pretty solid results:
-*   **Directional Accuracy:** ~77% (It’s quite good at guessing if the stock will go up or down).
-*   **R² Score:** 0.64 (Explains a good chunk of the variance).
-*   **MAE:** 2.21%
+## 3. Performance & Tuning
+We use a dedicated script `tune_hyperparameters.py` to run Optuna optimization trials. This ensures our hyperparameters are data-driven rather than guessed.
 
-## 2. CatBoost Regression Model (`catboost_regression_model.py`)
+**Recent Verification Results (Test Stock: Citigroup):**
+-   **Directional Accuracy:** 80.1% (Correctly predicts Up/Down movement)
+-   **RMSE:** 0.0266
+-   **R² Score:** 0.67
+-   **MAE:** 2.10%
 
-We also experimented with CatBoost to see if it could handle the noise in the data better than LightGBM. The setup was identical—predicting the 5-day forward return.
+*Note: These metrics are from a specific walk-forward validation window and may vary as market regimes shift.*
 
-It actually performed slightly better in terms of raw error metrics (lower MAE and higher R² of 0.66), likely because of how it handles categorical nuances and overfitting. However, LightGBM still edged it out slightly when it came to just predicting the pure direction of the move.
-
-## 3. Ensemble Model (`ensemble_model.py`)
-
-Since we had two decent models, it made sense to combine them. We built a simple ensemble that takes a weighted average of the predictions from both LightGBM and CatBoost.
-
-We gave CatBoost slightly more weight (60%) because of its stability, with LightGBM taking the remaining 40%.
-
-### Results
-This "Super Model" approach worked well. It managed to keep the high directional accuracy of the LightGBM model (77%) while pulling the error rates down closer to the CatBoost levels. It feels like the most robust option for actual trading since it balances the strengths of both.
+## 4. Visualization
+You can visually inspect the model's training process using the new plotting tools:
+```python
+# In your notebook or script:
+model.train(X_train, y_train, X_test, y_test)
+model.plot_training_history()  # Shows Train vs Val RMSE
+model.plot_results(results)    # Shows Predictions vs Actuals
+```
