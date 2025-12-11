@@ -21,7 +21,7 @@ class Config:
     MAX_WEIGHT_PER_STOCK = float(os.getenv('MAX_WEIGHT_PER_STOCK', '0.10'))
 
     # Data window
-    LOOKBACK_DAYS = int(os.getenv('LOOKBACK_DAYS', '504'))  # ~2 years
+    LOOKBACK_DAYS = int(os.getenv('LOOKBACK_DAYS', '900'))  # ~2 years
     TRADING_DAYS_PER_YEAR = 252
 
     # Rebalancing controls

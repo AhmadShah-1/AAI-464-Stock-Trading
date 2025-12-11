@@ -2,10 +2,8 @@ import pandas as pd
 import alpaca_trade_api as tradeapi
 from main.config_karina import Config
 
-
-# ================================
 # Alpaca Connection
-# ================================
+
 
 api = tradeapi.REST(
     Config.ALPACA_API_KEY,
@@ -15,9 +13,8 @@ api = tradeapi.REST(
 )
 
 
-# ================================
-# FIXED STOCK UNIVERSE (ROBUST)
-# ================================
+#fixed stock universe
+
 
 STATIC_UNIVERSE_40 = [
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA",
@@ -40,37 +37,38 @@ STATIC_UNIVERSE_40 = [
 
 def get_top_50_us_stocks():
     """
-    Returns a fixed, survivorship-bias-safe universe of large-cap stocks.
+    Returns a fixed universe of large-cap stocks
+
     """
     return STATIC_UNIVERSE_40.copy()
 
 
-# ================================
-# PRICE HISTORY LOADER
-# ================================
-
+# loading price history
 def get_price_history(symbols):
     """
-    Pulls daily adjusted close prices using a rolling window defined
-    by Config.LOOKBACK_DAYS.
+    Pulls daily adjusted close prices for the given symbols using a fixed 
+    historical window large enough to support:
+      - 2-year training period
+      - 1-year+ test period
     """
 
+    # Hard-coded start date for guaranteed coverage
+    start = pd.Timestamp("2022-10-01")
     end = pd.Timestamp.utcnow()
-    start = end - pd.Timedelta(days=Config.LOOKBACK_DAYS + 10)
 
     bars = api.get_bars(
         symbols,
         tradeapi.TimeFrame.Day,
-        start=start.isoformat(),
-        end=end.isoformat(),
+        start=start.strftime("%Y-%m-%d"),
+        end=end.strftime("%Y-%m-%d"),
         adjustment="all",
-        feed="iex"
+        feed="iex"   
     ).df
 
     if bars.empty:
         raise RuntimeError("No price data returned from Alpaca.")
 
-    # Pivot into price matrix
+    # Pivot into wide format
     prices = bars.pivot_table(
         values="close",
         index="timestamp",
@@ -78,11 +76,6 @@ def get_price_history(symbols):
     )
 
     prices = prices.sort_index()
-
-    # Only drop rows where ALL prices are missing
-    prices = prices.dropna(how="all")
-
-    # Keep rolling window
-    prices = prices.tail(Config.LOOKBACK_DAYS)
+    prices = prices.dropna(axis=1)
 
     return prices

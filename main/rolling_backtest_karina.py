@@ -14,9 +14,9 @@ from main.models.optimizer_karina import min_variance_portfolio
 from main.utils.feature_engineering.features_karina import shrink_covariance
 
 
-#############################
-# DIAGNOSTIC HELPERS
-#############################
+
+# Diagnostics
+
 
 def compute_turnover(weights_history):
     turnovers = []
@@ -55,9 +55,9 @@ def return_distribution_stats(portfolio_returns):
     return stats
 
 
-#############################
-# ROLLING BACKTEST
-#############################
+
+# Rolling Backtest
+
 
 def rolling_backtest(
     price_df: pd.DataFrame,
@@ -101,9 +101,8 @@ def rolling_backtest(
 
     portfolio_returns = pd.concat(portfolio_returns)
 
-    #############################
-    # RUN DIAGNOSTICS
-    #############################
+    # run diagnostics
+    
 
     turnover = compute_turnover(weights_history)
     stability = weight_stability(weights_history)
