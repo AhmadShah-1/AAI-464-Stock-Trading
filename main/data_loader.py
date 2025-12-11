@@ -3,8 +3,10 @@ import alpaca_trade_api as tradeapi
 from main.config_karina import Config
 
 
+# ================================
+# Alpaca Connection
+# ================================
 
-# Initialize Alpaca connection
 api = tradeapi.REST(
     Config.ALPACA_API_KEY,
     Config.ALPACA_SECRET_KEY,
@@ -13,32 +15,44 @@ api = tradeapi.REST(
 )
 
 
+# ================================
+# FIXED STOCK UNIVERSE (ROBUST)
+# ================================
+
+STATIC_UNIVERSE_40 = [
+    "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA",
+    "JPM", "BAC", "WFC",
+    "XOM", "CVX",
+    "JNJ", "PFE", "UNH",
+    "PG", "KO", "PEP",
+    "DIS", "NFLX",
+    "CSCO", "INTC", "AMD",
+    "V", "MA",
+    "WMT", "MCD", "COST",
+    "ABBV", "MRK",
+    "T", "VZ",
+    "ADBE", "CRM",
+    "CAT", "BA",
+    "IBM", "GE",
+    "GS", "MS"
+]
+
 
 def get_top_50_us_stocks():
     """
-    Pulls all active tradable US equities and returns 50 symbols.
-    This is a placeholder universe definition for the MVP.
+    Returns a fixed, survivorship-bias-safe universe of large-cap stocks.
     """
+    return STATIC_UNIVERSE_40.copy()
 
-    assets = api.list_assets(status="active", asset_class="us_equity")
 
-    symbols = [
-        a.symbol for a in assets
-        if a.tradable and a.exchange in ["NYSE", "NASDAQ"]
-    ]
-
-    symbols = sorted(symbols)
-    return symbols[:50]
-
+# ================================
+# PRICE HISTORY LOADER
+# ================================
 
 def get_price_history(symbols):
     """
-    Pulls daily adjusted close prices for the given symbols using a
-    rolling lookback window defined in config.
-    Returns a DataFrame with:
-        index = date
-        columns = symbols
-        values = adjusted close prices
+    Pulls daily adjusted close prices using a rolling window defined
+    by Config.LOOKBACK_DAYS.
     """
 
     end = pd.Timestamp.utcnow()
@@ -56,19 +70,19 @@ def get_price_history(symbols):
     if bars.empty:
         raise RuntimeError("No price data returned from Alpaca.")
 
-    # pivot logic
-    if "symbol" in bars.columns:
-        prices = bars.pivot_table(
-            values="close",
-            index="timestamp",
-            columns="symbol"
-        )
-    else:
-        # Fallback for very old SDK versions
-        prices = bars["close"].unstack(level=0)
+    # Pivot into price matrix
+    prices = bars.pivot_table(
+        values="close",
+        index="timestamp",
+        columns="symbol"
+    )
 
     prices = prices.sort_index()
-    prices = prices.dropna(axis=1)
+
+    # Only drop rows where ALL prices are missing
+    prices = prices.dropna(how="all")
+
+    # Keep rolling window
     prices = prices.tail(Config.LOOKBACK_DAYS)
 
     return prices
