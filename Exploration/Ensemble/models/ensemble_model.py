@@ -1,11 +1,3 @@
-"""
-Ensemble Regression Model for Stock Trading
-Combines LightGBM and CatBoost predictions for superior performance.
-
-Strategy: Weighted Average Ensemble
-Prediction = (w1 * LightGBM) + (w2 * CatBoost)
-"""
-
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -16,8 +8,6 @@ import sys
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add parent directory to path for imports
-# Pointing to main directory for utils and config
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
@@ -47,13 +37,11 @@ class EnsembleModel:
         self.lgb_weight = lgb_weight
         self.cat_weight = cat_weight
         
-        # Initialize sub-models
         self.lgb_model = LightGBMRegressionModel(use_tuned_params=False) # Baseline often generalizes better
         self.cat_model = CatBoostRegressionModel()
         
         self.is_trained = False
         self.feature_columns = []
-        
     
     def fetch_data(self, train_symbols, test_symbols, days=None):
         """Fetch data using one of the sub-models (they share the same logic)."""
@@ -62,7 +50,6 @@ class EnsembleModel:
     
     def prepare_data(self, df, forward_days=5):
         """Prepare data using one of the sub-models."""
-        # Both models use the same feature engineering pipeline now
         return self.cat_model.prepare_data(df, forward_days)
     
     
@@ -70,11 +57,9 @@ class EnsembleModel:
         """Train both sub-models."""
         print("Training Ensemble Model...")
         
-        # Train LightGBM
         print("Training LightGBM Component...")
         self.lgb_model.train(X_train, y_train, X_val, y_val)
         
-        # Train CatBoost
         print("Training CatBoost Component...")
         self.cat_model.train(X_train, y_train, X_val, y_val)
         
@@ -88,11 +73,9 @@ class EnsembleModel:
         if not self.is_trained:
             raise RuntimeError("Model must be trained before making predictions")
         
-        # Get individual predictions
         pred_lgb = self.lgb_model.predict(X)
         pred_cat = self.cat_model.predict(X)
         
-        # Weighted average
         final_pred = (pred_lgb * self.lgb_weight) + (pred_cat * self.cat_weight)
         
         return final_pred
@@ -113,13 +96,11 @@ class EnsembleModel:
         """Comprehensive ensemble evaluation."""
         predictions = self.predict(X_test)
         
-        # Regression metrics
         rmse = np.sqrt(mean_squared_error(y_test, predictions))
         mae = mean_absolute_error(y_test, predictions)
         r2 = r2_score(y_test, predictions)
         directional_accuracy = np.mean(np.sign(predictions) == np.sign(y_test))
         
-        # Trading signal metrics
         pred_actions = self.predict_action(X_test, threshold)
         
         actual_actions = np.ones(len(y_test), dtype=int)
@@ -128,10 +109,8 @@ class EnsembleModel:
         
         action_accuracy = np.mean(pred_actions == actual_actions)
         
-        # Confusion matrix
         cm = confusion_matrix(actual_actions, pred_actions, labels=[0, 1, 2])
         
-        # Feature importance (Proxy using LightGBM component)
         importance_df = pd.DataFrame({
             'feature': self.feature_columns,
             'importance': self.lgb_model.model.feature_importance(importance_type='gain')
@@ -173,14 +152,13 @@ class EnsembleModel:
         print(f"  HOLD      {cm[1,0]:4d}  {cm[1,1]:4d}  {cm[1,2]:4d}")
         print(f"  BUY       {cm[2,0]:4d}  {cm[2,1]:4d}  {cm[2,2]:4d}")
 
-        
     
     def plot_results(self, results, save_path=None):
         """Create evaluation plots."""
         fig, axes = plt.subplots(2, 2, figsize=(18, 10))
         axes = axes.flatten()
         
-        # Plot 1: Predicted vs Actual (Scatter)
+        # Plot 1: Predicted vs Actual (Scatter plt)
         axes[0].scatter(results['actuals'], results['predictions'], alpha=0.5, color='purple')
         axes[0].plot([results['actuals'].min(), results['actuals'].max()],
                      [results['actuals'].min(), results['actuals'].max()],
@@ -229,8 +207,6 @@ class EnsembleModel:
         # LightGBM History
         if hasattr(self.lgb_model, 'evals_result') and self.lgb_model.evals_result:
             lgb_res = self.lgb_model.evals_result
-            # lgb_res structure: {'training': {'rmse': [...]}, 'valid_1': {'rmse': [...]}}
-            # keys might vary depending on dataset names provided during training
             
             for dataset_name, metrics in lgb_res.items():
                 for metric_name, values in metrics.items():
@@ -248,7 +224,6 @@ class EnsembleModel:
         # CatBoost History
         if hasattr(self.cat_model, 'evals_result') and self.cat_model.evals_result:
             cb_res = self.cat_model.evals_result
-            # cb_res structure: {'learn': {'RMSE': [...]}, 'validation': {'RMSE': [...]}}
             
             for dataset_name, metrics in cb_res.items():
                 for metric_name, values in metrics.items():
@@ -272,13 +247,9 @@ class EnsembleModel:
         # plt.show()
 
 
-# ====================================================================================
-# MAIN EXECUTION
-# ====================================================================================
-
 if __name__ == "__main__":
     
-    # Configuration
+
     TRAIN_SYMBOLS = [
         'BAC', 'JPM', 'WFC', 'GS', 'MS', 'USB', 'PNC', 'AXP', 'COF', 'SCHW', 'BLK', 'BK', 'STT', 'TFC'
     ]
@@ -286,15 +257,14 @@ if __name__ == "__main__":
     FORWARD_DAYS = 5
     FETCH_NEW_DATA = True
     
-    # Initialize Ensemble
-    # We give slightly more weight to CatBoost because it had better R2 and Action Accuracy
+
+    # We give slightly more weight to CatBoost because it had better R2 and Action Accuracy from previous experiments
     model = EnsembleModel(lgb_weight=0.4, cat_weight=0.6)
     
     # Load/Fetch Data
     if FETCH_NEW_DATA:
         train_df, test_df = model.fetch_data(TRAIN_SYMBOLS, TEST_SYMBOLS)
     else:
-        # Fallback to CSV loading logic if needed (omitted for brevity, same as others)
         pass
         
     # Feature Engineering
