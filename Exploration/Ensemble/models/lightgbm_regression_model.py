@@ -103,9 +103,7 @@ class LightGBMRegressionModel:
         Returns:
             Tuple of (train_df, test_df)
         """
-        print("="*70)
-        print("FETCHING DATA FROM ALPACA")
-        print("="*70)
+        print("Fetching data from Alpaca...")
         
         all_symbols = train_symbols + test_symbols
         combined_df = fetch_multi_stock_data(symbols=all_symbols, days=days)
@@ -116,7 +114,7 @@ class LightGBMRegressionModel:
         
         print(f"\nTraining: {len(train_df)} samples from {len(train_symbols)} stocks")
         print(f"Testing: {len(test_df)} samples from {len(test_symbols)} stocks")
-        print("="*70)
+
         
         return train_df, test_df
     
@@ -348,9 +346,7 @@ class LightGBMRegressionModel:
             X_val: Optional validation features
             y_val: Optional validation targets
         """
-        print("\n" + "="*70)
-        print("TRAINING LIGHTGBM MODEL")
-        print("="*70)
+        print("Training LightGBM Model...")
         print(f"Training samples: {len(X_train)}")
         print(f"Features: {X_train.shape[1]}")
         
@@ -376,9 +372,7 @@ class LightGBMRegressionModel:
         
         self.is_trained = True
         
-        print(f"\n✅ Training complete!")
-        print(f"   Best iteration: {self.model.best_iteration}")
-        print("="*70)
+        print("Training complete.")
     
     
     def predict(self, X):
@@ -493,9 +487,7 @@ class LightGBMRegressionModel:
     
     def print_evaluation(self, results):
         """Print evaluation results."""
-        print("\n" + "="*70)
-        print("MODEL EVALUATION")
-        print("="*70)
+
         print(f"RMSE:                     {results['rmse']:.4f}")
         print(f"MAE:                      {results['mae']:.4f} ({results['mae']*100:.2f}%)")
         print(f"R² Score:                 {results['r2']:.4f}")

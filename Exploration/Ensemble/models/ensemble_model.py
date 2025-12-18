@@ -64,22 +64,19 @@ class EnsembleModel:
     
     def train(self, X_train, y_train, X_val=None, y_val=None):
         """Train both sub-models."""
-        print("\n" + "="*70)
-        print("TRAINING ENSEMBLE MODEL")
-        print("="*70)
+        print("Training Ensemble Model...")
         
         # Train LightGBM
-        print("\n>>> Training LightGBM Component...")
+        print("Training LightGBM Component...")
         self.lgb_model.train(X_train, y_train, X_val, y_val)
         
         # Train CatBoost
-        print("\n>>> Training CatBoost Component...")
+        print("Training CatBoost Component...")
         self.cat_model.train(X_train, y_train, X_val, y_val)
         
         self.is_trained = True
         self.feature_columns = X_train.columns.tolist()
-        print("\n✅ Ensemble Training Complete!")
-        print("="*70)
+        print("Ensemble Training Complete.")
         
     
     def predict(self, X):
@@ -154,11 +151,9 @@ class EnsembleModel:
     
     def print_evaluation(self, results):
         """Print evaluation results."""
-        print("\n" + "="*70)
-        print("ENSEMBLE MODEL EVALUATION")
-        print("="*70)
+
         print(f"Weights: LightGBM={self.lgb_weight}, CatBoost={self.cat_weight}")
-        print("-" * 30)
+
         print(f"RMSE:                     {results['rmse']:.4f}")
         print(f"MAE:                      {results['mae']:.4f} ({results['mae']*100:.2f}%)")
         print(f"R² Score:                 {results['r2']:.4f}")
@@ -173,7 +168,7 @@ class EnsembleModel:
         print(f"  SELL      {cm[0,0]:4d}  {cm[0,1]:4d}  {cm[0,2]:4d}")
         print(f"  HOLD      {cm[1,0]:4d}  {cm[1,1]:4d}  {cm[1,2]:4d}")
         print(f"  BUY       {cm[2,0]:4d}  {cm[2,1]:4d}  {cm[2,2]:4d}")
-        print("="*70)
+
         
     
     def plot_results(self, results, save_path=None):
@@ -217,9 +212,60 @@ class EnsembleModel:
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"\n✅ Plots saved to: {save_path}")
+            print(f"Plots saved to: {save_path}")
         
-        plt.show()
+        # plt.show()
+
+    def plot_training_history(self, save_path=None):
+        """
+        Plot training history (Loss Curves) for LightGBM and CatBoost.
+        """
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        
+        # LightGBM History
+        if hasattr(self.lgb_model, 'evals_result') and self.lgb_model.evals_result:
+            lgb_res = self.lgb_model.evals_result
+            # lgb_res structure: {'training': {'rmse': [...]}, 'valid_1': {'rmse': [...]}}
+            # keys might vary depending on dataset names provided during training
+            
+            for dataset_name, metrics in lgb_res.items():
+                for metric_name, values in metrics.items():
+                    axes[0].plot(values, label=f"{dataset_name} - {metric_name}")
+            
+            axes[0].set_title("LightGBM Training History")
+            axes[0].set_xlabel("Iterations")
+            axes[0].set_ylabel("Metric")
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3)
+        else:
+            axes[0].text(0.5, 0.5, "No LightGBM History Available", ha='center', va='center')
+            axes[0].axis('off')
+
+        # CatBoost History
+        if hasattr(self.catboost_model, 'evals_result') and self.catboost_model.evals_result:
+            cb_res = self.catboost_model.evals_result
+            # cb_res structure: {'learn': {'RMSE': [...]}, 'validation': {'RMSE': [...]}}
+            
+            for dataset_name, metrics in cb_res.items():
+                for metric_name, values in metrics.items():
+                    axes[1].plot(values, label=f"{dataset_name} - {metric_name}")
+            
+            axes[1].set_title("CatBoost Training History")
+            axes[1].set_xlabel("Iterations")
+            axes[1].set_ylabel("Metric")
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+        else:
+            axes[1].text(0.5, 0.5, "No CatBoost History Available", ha='center', va='center')
+            axes[1].axis('off')
+            
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Training history plot saved to: {save_path}")
+            
+        # plt.show()
 
 
 # ====================================================================================
@@ -248,7 +294,7 @@ if __name__ == "__main__":
         pass
         
     # Feature Engineering
-    print("\nCreating features...")
+    print("Creating features...")
     # We can use either model's prepare_data since they are identical now
     train_features = model.prepare_data(train_df, FORWARD_DAYS).dropna()
     test_features = model.prepare_data(test_df, FORWARD_DAYS).dropna()
@@ -271,7 +317,7 @@ if __name__ == "__main__":
             top_features.append(f)
             
     feature_cols = top_features
-    print(f"\n✅ Selected {len(feature_cols)} features for training")
+    print(f"Selected {len(feature_cols)} features for training")
     
     # Prepare X and y
     X_train = train_features[feature_cols]
