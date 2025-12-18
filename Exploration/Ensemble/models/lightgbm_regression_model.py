@@ -1,15 +1,3 @@
-"""
-LightGBM Regression Model for Stock Trading
-Complete end-to-end pipeline: Data fetching → Training → Evaluation
-
-Performance:
-- R² Score: 0.2637 (baseline) / 0.2597 (tuned)
-- Directional Accuracy: 64.89%
-- MAE: 3.12%
-
-Best hyperparameters from 100-trial Optuna optimization included.
-"""
-
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
@@ -22,12 +10,9 @@ import sys
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add parent directory to path for imports
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
-
-# Add Ensemble directory to path to allow importing from utils
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from data_utils.multi_stock_data import fetch_multi_stock_data
@@ -57,7 +42,6 @@ class LightGBMRegressionModel:
         self.is_trained = False
         self.feature_columns = []
         
-        # Best parameters from 100-trial Optuna optimization
         if use_tuned_params:
             self.params = {
                 'objective': 'regression',
@@ -77,7 +61,6 @@ class LightGBMRegressionModel:
             }
             self.n_estimators = 869
         else:
-            # Baseline parameters (actually perform better!)
             self.params = {
                 'objective': 'regression',
                 'metric': 'rmse',
@@ -108,7 +91,6 @@ class LightGBMRegressionModel:
         all_symbols = train_symbols + test_symbols
         combined_df = fetch_multi_stock_data(symbols=all_symbols, days=days)
         
-        # Split by stock
         train_df = combined_df[combined_df['symbol'].isin(train_symbols)].reset_index(drop=True)
         test_df = combined_df[combined_df['symbol'].isin(test_symbols)].reset_index(drop=True)
         
@@ -149,21 +131,20 @@ class LightGBMRegressionModel:
         """Create 13 advanced technical features."""
         df = df.copy()
         
-        # RSI
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         df['rsi_14'] = 100 - (100 / (1 + rs))
         
-        # MACD
+
         ema_12 = df['close'].ewm(span=12, adjust=False).mean()
         ema_26 = df['close'].ewm(span=26, adjust=False).mean()
         df['macd'] = ema_12 - ema_26
         df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
         df['macd_diff'] = df['macd'] - df['macd_signal']
         
-        # Bollinger Bands
+
         df['bb_middle'] = df['close'].rolling(window=20).mean()
         bb_std = df['close'].rolling(window=20).std()
         df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
@@ -171,7 +152,6 @@ class LightGBMRegressionModel:
         df['bb_width'] = df['bb_upper'] - df['bb_lower']
         df['bb_position'] = (df['close'] - df['bb_lower']) / df['bb_width']
         
-        # ATR
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
@@ -179,18 +159,15 @@ class LightGBMRegressionModel:
         true_range = ranges.max(axis=1)
         df['atr_14'] = true_range.rolling(window=14).mean()
         
-        # Stochastic
         low_14 = df['low'].rolling(window=14).min()
         high_14 = df['high'].rolling(window=14).max()
         df['stoch_k'] = 100 * ((df['close'] - low_14) / (high_14 - low_14))
         df['stoch_d'] = df['stoch_k'].rolling(window=3).mean()
         
-        # EMA
         df['ema_12'] = ema_12
         df['ema_26'] = ema_26
         df['ema_cross'] = df['ema_12'] - df['ema_26']
         
-        # Williams %R
         df['williams_r'] = -100 * ((high_14 - df['close']) / (high_14 - low_14))
         
         return df
@@ -200,7 +177,6 @@ class LightGBMRegressionModel:
         """Create 39 additional comprehensive features for improved prediction."""
         df = df.copy()
         
-        # === 1. PRICE ACTION FEATURES (8) ===
         df['overnight_gap'] = (df['open'] - df['close'].shift()) / df['close'].shift()
         df['gap_filled'] = ((df['high'] >= df['close'].shift()) & (df['low'] <= df['close'].shift())).astype(int)
         df['intraday_range'] = (df['high'] - df['low']) / df['open']
@@ -210,7 +186,6 @@ class LightGBMRegressionModel:
         df['body_size'] = np.abs(df['close'] - df['open']) / df['open']
         df['daily_return_volatility'] = df['returns'].rolling(window=10).std()
         
-        # === 2. VOLUME FEATURES (6) ===
         price_change = df['close'] - df['close'].shift()
         df['volume_price_trend'] = (price_change / df['close'].shift() * df['volume']).cumsum()
         df['on_balance_volume'] = (np.sign(price_change) * df['volume']).cumsum()
@@ -219,32 +194,27 @@ class LightGBMRegressionModel:
         df['volume_momentum'] = df['volume'].pct_change(5)
         df['high_volume_days'] = (df['volume'] > df['volume'].rolling(20).mean() * 1.5).rolling(10).sum()
         
-        # === 3. MOMENTUM & TREND FEATURES (7) ===
         df['roc_5'] = (df['close'] - df['close'].shift(5)) / df['close'].shift(5)
         df['roc_10'] = (df['close'] - df['close'].shift(10)) / df['close'].shift(10)
         
-        # ADX (Average Directional Index)
         plus_dm = df['high'].diff()
         minus_dm = -df['low'].diff()
         plus_dm[plus_dm < 0] = 0
         minus_dm[minus_dm < 0] = 0
-        tr = df['atr_14'] * 14  # Approximate true range sum
+        tr = df['atr_14'] * 14  
         plus_di = 100 * (plus_dm.rolling(14).mean() / tr)
         minus_di = 100 * (minus_dm.rolling(14).mean() / tr)
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
         df['adx_14'] = dx.rolling(14).mean()
         
-        # CCI (Commodity Channel Index)
         typical_price = (df['high'] + df['low'] + df['close']) / 3
         df['cci_20'] = (typical_price - typical_price.rolling(20).mean()) / (0.015 * typical_price.rolling(20).std())
         
-        # TRIX (Triple Exponential Moving Average)
         ema1 = df['close'].ewm(span=15, adjust=False).mean()
         ema2 = ema1.ewm(span=15, adjust=False).mean()
         ema3 = ema2.ewm(span=15, adjust=False).mean()
         df['trix'] = ema3.pct_change() * 100
         
-        # Ultimate Oscillator (multi-timeframe)
         bp = df['close'] - df[['low', 'close']].shift().min(axis=1)
         tr_uo = df[['high', 'close']].shift().max(axis=1) - df[['low', 'close']].shift().min(axis=1)
         avg7 = bp.rolling(7).sum() / tr_uo.rolling(7).sum()
@@ -252,7 +222,6 @@ class LightGBMRegressionModel:
         avg28 = bp.rolling(28).sum() / tr_uo.rolling(28).sum()
         df['ultimate_oscillator'] = 100 * ((4 * avg7 + 2 * avg14 + avg28) / 7)
         
-        # KST (Know Sure Thing)
         roc1 = df['close'].pct_change(10)
         roc2 = df['close'].pct_change(15)
         roc3 = df['close'].pct_change(20)
@@ -260,13 +229,11 @@ class LightGBMRegressionModel:
         df['kst'] = (roc1.rolling(10).mean() * 1 + roc2.rolling(10).mean() * 2 + 
                      roc3.rolling(10).mean() * 3 + roc4.rolling(15).mean() * 4)
         
-        # === 4. VOLATILITY FEATURES (5) ===
         df['historical_volatility_20'] = df['returns'].rolling(20).std() * np.sqrt(252)
         
-        # Parkinson volatility (high-low range estimator)
         df['parkinson_volatility'] = np.sqrt(1/(4*np.log(2)) * ((np.log(df['high']/df['low']))**2).rolling(20).mean()) * np.sqrt(252)
         
-        # Garman-Klass volatility (OHLC estimator)
+        # Garman-Klass volatility: I recently learnt about this. It is better than Volatility Index (VI) as it uses OHLC data instead of just closing prices.
         log_hl = (np.log(df['high']) - np.log(df['low']))**2
         log_co = (np.log(df['close']) - np.log(df['open']))**2
         df['garman_klass_volatility'] = np.sqrt((0.5 * log_hl - (2*np.log(2)-1) * log_co).rolling(20).mean()) * np.sqrt(252)
@@ -274,13 +241,11 @@ class LightGBMRegressionModel:
         df['volatility_ratio'] = df['volatility_5'] / df['volatility_10']
         df['volatility_breakout'] = (df['volatility_10'] > df['volatility_10'].rolling(50).mean() + 2*df['volatility_10'].rolling(50).std()).astype(int)
         
-        # === 5. MARKET MICROSTRUCTURE FEATURES (4) ===
         df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap']
         df['price_efficiency'] = df['close'] / (df['high'] - df['low']).rolling(20).sum()
         df['trade_intensity'] = df['trade_count'] / df['volume']
         df['avg_trade_size'] = df['volume'] / df['trade_count']
         
-        # === 6. TIME-BASED FEATURES (5) ===
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             df['day_of_week'] = df['timestamp'].dt.dayofweek
@@ -292,7 +257,6 @@ class LightGBMRegressionModel:
                                   (df['timestamp'] + pd.Timedelta(days=1)).dt.is_month_end |
                                   (df['timestamp'] + pd.Timedelta(days=2)).dt.is_month_end).astype(int)
                                   
-        # === 7. NEWS SENTIMENT FEATURES (New) ===
         if 'news_sentiment' in df.columns:
             # Sentiment momentum (change in sentiment)
             df['sentiment_momentum'] = df['news_sentiment'].diff()
@@ -350,10 +314,8 @@ class LightGBMRegressionModel:
         print(f"Training samples: {len(X_train)}")
         print(f"Features: {X_train.shape[1]}")
         
-        # Store feature columns
         self.feature_columns = X_train.columns.tolist()
         
-        # Create datasets
         train_data = lgb.Dataset(X_train, label=y_train)
         valid_sets = [train_data]
         
@@ -361,7 +323,6 @@ class LightGBMRegressionModel:
             valid_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
             valid_sets.append(valid_data)
         
-        # Train model
         self.model = lgb.train(
             self.params,
             train_data,
@@ -416,11 +377,9 @@ class LightGBMRegressionModel:
         predictions = self.predict(X)
         actions = self.predict_action(X, threshold)
         
-        # Map actions to labels
         action_labels = {0: 'SELL', 1: 'HOLD', 2: 'BUY'}
         labels = [action_labels[a] for a in actions]
         
-        # Calculate confidence (distance from threshold)
         confidence = np.abs(predictions) / threshold
         confidence = np.clip(confidence, 0, 1)  # Cap at 100%
         
@@ -443,13 +402,11 @@ class LightGBMRegressionModel:
         """
         predictions = self.predict(X_test)
         
-        # Regression metrics
         rmse = np.sqrt(mean_squared_error(y_test, predictions))
         mae = mean_absolute_error(y_test, predictions)
         r2 = r2_score(y_test, predictions)
         directional_accuracy = np.mean(np.sign(predictions) == np.sign(y_test))
         
-        # Trading signal metrics (±threshold)
         pred_actions = np.ones(len(predictions), dtype=int)
         pred_actions[predictions > threshold] = 2  # BUY
         pred_actions[predictions < -threshold] = 0  # SELL
@@ -460,10 +417,8 @@ class LightGBMRegressionModel:
         
         action_accuracy = np.mean(pred_actions == actual_actions)
         
-        # Confusion matrix for trading signals
         cm = confusion_matrix(actual_actions, pred_actions, labels=[0, 1, 2])
         
-        # Feature importance
         importance_df = pd.DataFrame({
             'feature': self.feature_columns,
             'importance': self.model.feature_importance(importance_type='gain')
@@ -564,25 +519,21 @@ class LightGBMRegressionModel:
         plt.show()
 
 
-# ====================================================================================
-# MAIN EXECUTION
-# ====================================================================================
-
 if __name__ == "__main__":
     
     # Configuration
     TRAIN_SYMBOLS = [
-        'BAC', 'JPM', 'WFC',       # Original Banks
-        'GS', 'MS',                # Investment Banks
-        'USB', 'PNC',              # Regional/Diversified Banks
-        'AXP', 'COF',              # Credit Services
-        'SCHW', 'BLK',             # Asset Management
-        'BK', 'STT', 'TFC'         # Custody & Regional Banks
+        'BAC', 'JPM', 'WFC',       
+        'GS', 'MS',                
+        'USB', 'PNC',              
+        'AXP', 'COF',              
+        'SCHW', 'BLK',             
+        'BK', 'STT', 'TFC'         
     ]
-    TEST_SYMBOLS = ['C']           # Citigroup (remains the test case)
-    FORWARD_DAYS = 5                        # Predict 5-day returns
-    FETCH_NEW_DATA = True                  # Set to True to fetch from Alpaca
-    USE_TUNED_PARAMS = False                # Baseline often works better for generalization
+    TEST_SYMBOLS = ['C']           
+    FORWARD_DAYS = 5                        
+    FETCH_NEW_DATA = True                  
+    USE_TUNED_PARAMS = False                
     
     print("="*70)
     print("LIGHTGBM REGRESSION MODEL - STOCK TRADING")
@@ -593,11 +544,8 @@ if __name__ == "__main__":
     print(f"Using tuned params: {USE_TUNED_PARAMS}")
     print("="*70)
     
-    # Initialize model
     model = LightGBMRegressionModel(use_tuned_params=USE_TUNED_PARAMS)
     
-    # Load or fetch data
-    # Load or fetch data
     if FETCH_NEW_DATA:
         train_df, test_df = model.fetch_data(TRAIN_SYMBOLS, TEST_SYMBOLS)
     else:
@@ -605,43 +553,33 @@ if __name__ == "__main__":
         all_data = pd.read_csv('../data.csv')
         all_data['timestamp'] = pd.to_datetime(all_data['timestamp'])
         
-        # Separate Market Data
         market_symbols = ['SPY', 'VXX', 'XLF']
         market_df = all_data[all_data['symbol'].isin(market_symbols)].copy()
         stock_df = all_data[~all_data['symbol'].isin(market_symbols)].copy()
         
-        # Calculate Stock Returns (needed for relative strength)
         stock_df['returns'] = stock_df.groupby('symbol')['close'].pct_change()
         
-        # Calculate Market Returns
         market_df['market_return'] = market_df.groupby('symbol')['close'].pct_change()
         
-        # Pivot market data to have columns like 'SPY_return', 'XLF_return'
         market_pivoted = market_df.pivot(index='timestamp', columns='symbol', values='market_return')
         market_pivoted.columns = [f"{col}_return" for col in market_pivoted.columns]
         
-        # Merge Market Data with Stocks
         print("Merging market context features...")
         combined_df = stock_df.merge(market_pivoted, on='timestamp', how='left')
         
-        # Create Relative Strength Features
         for m_sym in market_symbols:
             if f"{m_sym}_return" in combined_df.columns:
                 combined_df[f'rs_{m_sym}'] = combined_df['returns'] - combined_df[f"{m_sym}_return"]
         
-        # Split Train/Test
         train_df = combined_df[combined_df['symbol'].isin(TRAIN_SYMBOLS)].reset_index(drop=True)
         test_df = combined_df[combined_df['symbol'].isin(TEST_SYMBOLS)].reset_index(drop=True)
         print(f"Loaded {len(train_df)} training samples, {len(test_df)} testing samples")
     
-    # Feature engineering
     print("\nCreating features...")
     train_features = model.prepare_data(train_df, FORWARD_DAYS).dropna()
     test_features = model.prepare_data(test_df, FORWARD_DAYS).dropna()
     
-    # Automatically detect all feature columns (exclude target and metadata)
     exclude_cols = ['target', 'forward_returns', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
-    # Also exclude raw market return columns if we only want relative strength, or keep them. Let's keep them.
     
     all_feature_cols = [col for col in train_features.columns if col not in exclude_cols]
     
@@ -650,18 +588,12 @@ if __name__ == "__main__":
     print(f"   Advanced features: 13")
     print(f"   Comprehensive features: 39")
     
-    # === CORRELATION-BASED FEATURE SELECTION ===
-    print(f"\n🔍 Performing correlation analysis with target...")
-    
-    # Calculate correlation with target
     correlations = train_features[all_feature_cols + ['target']].corr()['target'].drop('target')
     correlations_abs = correlations.abs().sort_values(ascending=False)
     
-    # Select top N features by correlation
-    TOP_N_FEATURES = 35  # Keep top 35 most correlated features
+    TOP_N_FEATURES = 35  
     top_features = correlations_abs.head(TOP_N_FEATURES).index.tolist()
     
-    # Force include news features if they exist
     news_features = ['news_sentiment', 'news_volume', 'sentiment_momentum', 'sentiment_ma_5', 'high_news_volume', 'sentiment_impact']
     forced_news_features = [f for f in news_features if f in all_feature_cols]
     
@@ -681,7 +613,6 @@ if __name__ == "__main__":
     print(f"\n✅ Selected {len(top_features)} features (including forced news features)")
     print(f"   Correlation range: {correlations_abs.iloc[TOP_N_FEATURES-1]:.4f} to {correlations_abs.iloc[0]:.4f}")
     
-    # Use selected features
     feature_cols = top_features
     
     X_train = train_features[feature_cols]
@@ -692,14 +623,11 @@ if __name__ == "__main__":
     print(f"Training: {len(X_train)} samples × {len(feature_cols)} features")
     print(f"Testing: {len(X_test)} samples × {len(feature_cols)} features")
     
-    # Train model
     model.train(X_train, y_train, X_test, y_test)
     
-    # Evaluate
     results = model.evaluate(X_test, y_test)
     model.print_evaluation(results)
     
-    # Plot results
     model.plot_results(results, save_path='lightgbm_results.png')
     
     print("\n" + "="*70)
@@ -711,7 +639,6 @@ if __name__ == "__main__":
     print(f"MAE: {results['mae']:.4f} ({results['mae']*100:.2f}%)")
     print("="*70)
     
-    # Example: Get trading signals for test set
     print("\n" + "="*70)
     print("TRADING SIGNALS EXAMPLE")
     print("="*70)
