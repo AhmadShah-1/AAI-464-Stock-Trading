@@ -93,7 +93,7 @@ Execute the python script:
 ```bash
 python3 models/ensemble_model.py
 ```
-Once the python file executes you should see print statements flowing in.
+Once the python file executes you should see print statements flowing in. It will also generate a plot with the final performance metrics.
 
 **Option 2 (Execute the notebook):**
 Locate and run `ensemble_model.ipynb`.
