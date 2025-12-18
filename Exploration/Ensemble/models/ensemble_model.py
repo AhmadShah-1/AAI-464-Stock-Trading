@@ -242,8 +242,8 @@ class EnsembleModel:
             axes[0].axis('off')
 
         # CatBoost History
-        if hasattr(self.catboost_model, 'evals_result') and self.catboost_model.evals_result:
-            cb_res = self.catboost_model.evals_result
+        if hasattr(self.cat_model, 'evals_result') and self.cat_model.evals_result:
+            cb_res = self.cat_model.evals_result
             # cb_res structure: {'learn': {'RMSE': [...]}, 'validation': {'RMSE': [...]}}
             
             for dataset_name, metrics in cb_res.items():
