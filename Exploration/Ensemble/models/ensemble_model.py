@@ -306,5 +306,20 @@ if __name__ == "__main__":
     results = model.evaluate(X_test, y_test)
     model.print_evaluation(results)
     
-    # Plot
     model.plot_results(results, save_path='ensemble_results.png')
+    
+    # Automatically open the plot (macOS/Linux/Windows support)
+    import subprocess
+    import platform
+    import os
+    
+    try:
+        if platform.system() == 'Darwin':       # macOS
+            subprocess.run(['open', 'ensemble_results.png'], check=True)
+        elif platform.system() == 'Windows':    # Windows
+            os.startfile('ensemble_results.png')
+        else:                                   # Linux
+            subprocess.run(['xdg-open', 'ensemble_results.png'], check=True)
+        print("Opened ensemble_results.png")
+    except Exception as e:
+        print(f"Could not open plot automatically: {e}")
