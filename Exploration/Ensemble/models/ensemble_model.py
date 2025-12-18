@@ -22,8 +22,12 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../main')))
 
-from .lightgbm_regression_model import LightGBMRegressionModel
-from .catboost_regression_model import CatBoostRegressionModel
+try:
+    from .lightgbm_regression_model import LightGBMRegressionModel
+    from .catboost_regression_model import CatBoostRegressionModel
+except ImportError:
+    from lightgbm_regression_model import LightGBMRegressionModel
+    from catboost_regression_model import CatBoostRegressionModel
 from config import Config
 
 
