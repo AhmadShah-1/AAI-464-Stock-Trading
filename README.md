@@ -37,7 +37,7 @@ AAI-464-Stock-Trading/
 │   ├── Ensemble/           # Development of Weighted Ensemble model (LightGBM + CatBoost)
 │   └── RF/                 # Random Forest implementation
 │
-└── requirements.txt        # Python dependency manifest
+└── requirements.txt        # Python dependency list
 ```
 
 ## Installation & Configuration
