@@ -43,7 +43,7 @@ AAI-464-Stock-Trading/
 ## Installation & Configuration
 
 ### Prerequisites
-*   Python 3.8 or higher
+*   Python 3.8+
 *   An active Alpaca Markets account (Paper Trading) for API access.
 
 ### Setup
